@@ -1,0 +1,40 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GoalieFinder.Domain", "GoalieFinder.Domain\GoalieFinder.Domain.csproj", "{CFE2E7DF-288F-41B7-A1A2-36CEDC3E788B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GoalieFinder.Application", "GoalieFinder.Application\GoalieFinder.Application.csproj", "{3B05B06B-BF85-42B9-9199-D8B14500E7D9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GoalieFinder.Infrastructure", "GoalieFinder.Infrastructure\GoalieFinder.Infrastructure.csproj", "{3296A475-0AE6-44E3-A1C6-8358D7EF8E80}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GoalieFinder.API", "GoalieFinder.API\GoalieFinder.API.csproj", "{C1AA8948-0A13-4884-9C78-438AA79962D5}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{CFE2E7DF-288F-41B7-A1A2-36CEDC3E788B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CFE2E7DF-288F-41B7-A1A2-36CEDC3E788B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CFE2E7DF-288F-41B7-A1A2-36CEDC3E788B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CFE2E7DF-288F-41B7-A1A2-36CEDC3E788B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3B05B06B-BF85-42B9-9199-D8B14500E7D9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3B05B06B-BF85-42B9-9199-D8B14500E7D9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3B05B06B-BF85-42B9-9199-D8B14500E7D9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3B05B06B-BF85-42B9-9199-D8B14500E7D9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3296A475-0AE6-44E3-A1C6-8358D7EF8E80}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3296A475-0AE6-44E3-A1C6-8358D7EF8E80}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3296A475-0AE6-44E3-A1C6-8358D7EF8E80}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3296A475-0AE6-44E3-A1C6-8358D7EF8E80}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C1AA8948-0A13-4884-9C78-438AA79962D5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C1AA8948-0A13-4884-9C78-438AA79962D5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C1AA8948-0A13-4884-9C78-438AA79962D5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C1AA8948-0A13-4884-9C78-438AA79962D5}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

@@ -8,10 +8,8 @@ terraform {
     }
   }
 
-  backend "s3" {
-    bucket = "goaliefinder-terraform-state"
-    key    = "production/terraform.tfstate"
-    region = "ca-central-1"
+  backend "local" {
+    path = "terraform.tfstate"
   }
 }
 

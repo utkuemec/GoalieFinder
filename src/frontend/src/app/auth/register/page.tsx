@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback, type KeyboardEvent, type ClipboardEvent } from 'react';
+import { useState, useRef, useEffect, type KeyboardEvent, type ClipboardEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -13,16 +13,8 @@ import api from '@/lib/api';
 import { Shield, MapPin, DollarSign, CheckCircle, ChevronRight, ArrowLeft, Mail } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CANADIAN_CITIES } from '@/lib/fields-data';
-import { GoogleLogin, type CredentialResponse } from '@react-oauth/google';
-import { jwtDecode } from 'jwt-decode';
 
-interface GoogleUserInfo {
-  email: string;
-  given_name: string;
-  family_name: string;
-  picture: string;
-  email_verified: boolean;
-}
+const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
 
 type Step = 'info' | 'google-extra' | 'verify' | 'profile';
 
@@ -33,6 +25,7 @@ export default function RegisterPage() {
   const [step, setStep] = useState<Step>('info');
   const [isGoogleUser, setIsGoogleUser] = useState(false);
   const [googlePhoto, setGooglePhoto] = useState('');
+  const [googleAccessToken, setGoogleAccessToken] = useState('');
 
   // Account info
   const [firstName, setFirstName] = useState('');
@@ -64,22 +57,45 @@ export default function RegisterPage() {
     return () => clearInterval(interval);
   }, [resendTimer]);
 
-  // Google sign-in success
-  const handleGoogleSuccess = useCallback((response: CredentialResponse) => {
-    if (!response.credential) return;
-    try {
-      const decoded = jwtDecode<GoogleUserInfo>(response.credential);
-      setFirstName(decoded.given_name || '');
-      setLastName(decoded.family_name || '');
-      setEmail(decoded.email || '');
-      setGooglePhoto(decoded.picture || '');
-      setIsGoogleUser(true);
-      setPassword('google-oauth-' + Date.now());
-      setStep('google-extra');
-    } catch {
-      setError('Failed to process Google sign-in. Please try again.');
-    }
+  // Handle Google OAuth callback (redirect-based)
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (!hash.includes('access_token')) return;
+
+    const params = new URLSearchParams(hash.substring(1));
+    const accessToken = params.get('access_token');
+    if (!accessToken) return;
+
+    window.history.replaceState({}, '', '/auth/register');
+
+    authApi.google(accessToken)
+      .then((res) => {
+        if (res.isNewUser && res.googleUser) {
+          setFirstName(res.googleUser.firstName || '');
+          setLastName(res.googleUser.lastName || '');
+          setEmail(res.googleUser.email || '');
+          setGooglePhoto(res.googleUser.profilePhotoUrl || '');
+          setIsGoogleUser(true);
+          setGoogleAccessToken(accessToken);
+          setStep('google-extra');
+        } else if (res.accessToken && res.user) {
+          login(res.accessToken, res.user);
+          router.push('/dashboard/goalkeeper');
+        } else {
+          setError('Unexpected response. Please try again.');
+        }
+      })
+      .catch((err) => {
+        const msg = err?.response?.data?.error || '';
+        setError(msg || 'Google sign-in failed. Please try again.');
+      });
   }, []);
+
+  const handleGoogleSignIn = () => {
+    const redirectUri = window.location.origin + '/auth/register';
+    const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=email%20profile&prompt=select_account`;
+    window.location.href = url;
+  };
 
   // Send verification code
   const sendVerificationCode = async () => {
@@ -175,21 +191,40 @@ export default function RegisterPage() {
     setError('');
     setLoading(true);
     try {
-      const response = await authApi.register({
-        email, password, firstName, lastName, phoneNumber: phone, role: 'Goalkeeper',
-      });
-      login(response.accessToken, response.user);
-
       const city = CANADIAN_CITIES.find((c) => c.id === selectedCity);
-      await goalkeepersApi.updateProfile({
-        pricePerMatch: parseFloat(pricePerMatch),
-        experienceYears: parseInt(experienceYears) || 0,
-        bio: bio || undefined,
-        latitude: city?.lat || 43.6532,
-        longitude: city?.lng || -79.3832,
-        maxTravelDistanceKm: parseInt(maxDistance),
-        isAvailable: true,
-      });
+      const lat = city?.lat || 43.6532;
+      const lng = city?.lng || -79.3832;
+
+      if (isGoogleUser) {
+        const response = await authApi.googleCompleteRegistration({
+          googleAccessToken: googleAccessToken,
+          firstName,
+          lastName,
+          phoneNumber: phone,
+          pricePerMatch: parseFloat(pricePerMatch),
+          experienceYears: parseInt(experienceYears) || 0,
+          bio: bio || undefined,
+          latitude: lat,
+          longitude: lng,
+          maxTravelDistanceKm: parseInt(maxDistance),
+        });
+        login(response.accessToken, response.user);
+      } else {
+        const response = await authApi.register({
+          email, password, firstName, lastName, phoneNumber: phone, role: 'Goalkeeper',
+        });
+        login(response.accessToken, response.user);
+
+        await goalkeepersApi.updateProfile({
+          pricePerMatch: parseFloat(pricePerMatch),
+          experienceYears: parseInt(experienceYears) || 0,
+          bio: bio || undefined,
+          latitude: lat,
+          longitude: lng,
+          maxTravelDistanceKm: parseInt(maxDistance),
+          isAvailable: true,
+        });
+      }
 
       router.push('/dashboard/goalkeeper');
     } catch (err: unknown) {
@@ -207,8 +242,6 @@ export default function RegisterPage() {
     { key: 'profile', label: 'Profile' },
   ];
   const stepIndex = step === 'info' || step === 'google-extra' ? 0 : step === 'verify' ? 1 : 2;
-
-  const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 
   return (
     <div className="min-h-[80vh] flex items-center justify-center px-4 py-12">
@@ -246,32 +279,19 @@ export default function RegisterPage() {
             </div>
 
             {/* Google Sign In */}
-            {googleClientId ? (
-              <div className="mb-6">
-                <div className="flex justify-center">
-                  <GoogleLogin
-                    onSuccess={handleGoogleSuccess}
-                    onError={() => setError('Google sign-in failed')}
-                    size="large"
-                    width="400"
-                    text="signup_with"
-                    shape="rectangular"
-                  />
-                </div>
-              </div>
-            ) : (
+            {GOOGLE_CLIENT_ID && (
               <button
                 type="button"
-                disabled
-                className="w-full flex items-center justify-center gap-3 rounded-lg border-2 border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-400 mb-6 cursor-not-allowed"
+                onClick={handleGoogleSignIn}
+                className="w-full flex items-center justify-center gap-3 rounded-lg border-2 border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all mb-6"
               >
                 <svg width="20" height="20" viewBox="0 0 24 24">
-                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#ccc"/>
-                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#ccc"/>
-                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#ccc"/>
-                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#ccc"/>
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
                 </svg>
-                Google Sign-In (needs Client ID)
+                Sign up with Google
               </button>
             )}
 

@@ -61,7 +61,8 @@ export default function FindGoalkeeperPage() {
     try {
       const lat = selectedField?.lat || selectedCity?.lat || 43.6532;
       const lng = selectedField?.lng || selectedCity?.lng || -79.3832;
-      const data = await goalkeepersApi.getNearby(lat, lng, 30);
+      const matchDateTime = matchDate && matchTime ? new Date(`${matchDate}T${matchTime}`).toISOString() : undefined;
+      const data = await goalkeepersApi.getNearby(lat, lng, 30, 1, 20, matchDateTime);
       setResults(data.items);
     } catch {
       setResults([]);

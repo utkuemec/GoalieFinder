@@ -20,8 +20,9 @@ public class TokenService : ITokenService
 
     public string GenerateAccessToken(User user)
     {
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(
-            _configuration["Jwt:Secret"] ?? "GoalieFinderSuperSecretKey2024!@#$%^&*()"));
+        var secret = _configuration["Jwt:Secret"]
+            ?? throw new InvalidOperationException("JWT:Secret is not configured");
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
         var claims = new[]

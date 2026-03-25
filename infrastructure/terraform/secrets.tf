@@ -13,5 +13,13 @@ resource "aws_secretsmanager_secret_version" "app_secrets" {
     Jwt__Secret                          = var.jwt_secret
     Jwt__Issuer                          = "GoalieFinder"
     Jwt__Audience                        = "GoalieFinder"
+    Stripe__SecretKey                    = var.stripe_secret_key
+    Stripe__PublishableKey               = var.stripe_publishable_key
+    Email__SmtpHost                      = var.smtp_host
+    Email__SmtpPort                      = var.smtp_port
+    Email__SmtpUser                      = var.smtp_user
+    Email__SmtpPassword                  = var.smtp_password
+    Email__FromName                      = "GoalieFinder"
+    Frontend__BaseUrl                    = var.frontend_base_url
   })
 }

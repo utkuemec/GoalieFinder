@@ -59,6 +59,38 @@ resource "aws_ecs_task_definition" "api" {
       {
         name      = "Jwt__Audience"
         valueFrom = "${aws_secretsmanager_secret.app_secrets.arn}:Jwt__Audience::"
+      },
+      {
+        name      = "Stripe__SecretKey"
+        valueFrom = "${aws_secretsmanager_secret.app_secrets.arn}:Stripe__SecretKey::"
+      },
+      {
+        name      = "Stripe__PublishableKey"
+        valueFrom = "${aws_secretsmanager_secret.app_secrets.arn}:Stripe__PublishableKey::"
+      },
+      {
+        name      = "Email__SmtpHost"
+        valueFrom = "${aws_secretsmanager_secret.app_secrets.arn}:Email__SmtpHost::"
+      },
+      {
+        name      = "Email__SmtpPort"
+        valueFrom = "${aws_secretsmanager_secret.app_secrets.arn}:Email__SmtpPort::"
+      },
+      {
+        name      = "Email__SmtpUser"
+        valueFrom = "${aws_secretsmanager_secret.app_secrets.arn}:Email__SmtpUser::"
+      },
+      {
+        name      = "Email__SmtpPassword"
+        valueFrom = "${aws_secretsmanager_secret.app_secrets.arn}:Email__SmtpPassword::"
+      },
+      {
+        name      = "Email__FromName"
+        valueFrom = "${aws_secretsmanager_secret.app_secrets.arn}:Email__FromName::"
+      },
+      {
+        name      = "Frontend__BaseUrl"
+        valueFrom = "${aws_secretsmanager_secret.app_secrets.arn}:Frontend__BaseUrl::"
       }
     ]
 
@@ -72,11 +104,11 @@ resource "aws_ecs_task_definition" "api" {
     }
 
     healthCheck = {
-      command     = ["CMD-SHELL", "curl -f http://localhost:${var.api_container_port}/api/goalkeepers/nearby?lat=43.6&lng=-79.3 || exit 1"]
+      command     = ["CMD-SHELL", "curl -f http://localhost:${var.api_container_port}/api/payments/config || exit 1"]
       interval    = 30
       timeout     = 5
       retries     = 3
-      startPeriod = 60
+      startPeriod = 120
     }
   }])
 }
@@ -105,8 +137,8 @@ resource "aws_lb_target_group" "api" {
     healthy_threshold   = 2
     unhealthy_threshold = 5
     interval            = 30
-    timeout             = 5
-    path                = "/api/goalkeepers/nearby?lat=43.6&lng=-79.3"
+    timeout             = 10
+    path                = "/api/payments/config"
     matcher             = "200"
   }
 }

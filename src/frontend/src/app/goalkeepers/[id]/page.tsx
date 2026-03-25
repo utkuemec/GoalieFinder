@@ -39,12 +39,14 @@ export default function GoalkeeperProfilePage() {
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState<PageStep>('profile');
 
-  // Booking form — only need captain info since field/date come from search
+  // Booking form — captain info + notes
   const [captainName, setCaptainName] = useState('');
+  const [captainEmail, setCaptainEmail] = useState('');
   const [captainPhone, setCaptainPhone] = useState('');
   const [notes, setNotes] = useState('');
 
   const [clientSecret, setClientSecret] = useState('');
+  const [bookingId, setBookingId] = useState('');
   const [bookingLoading, setBookingLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -64,7 +66,9 @@ export default function GoalkeeperProfilePage() {
 
   const taxInfo = getTaxInfo(ctxProvince);
   const gkPrice = goalkeeper?.pricePerMatch || 0;
-  const tax = calculateTax(gkPrice, ctxProvince);
+  const serviceFee = Math.round(gkPrice * 0.10 * 100) / 100;
+  const subtotal = gkPrice + serviceFee;
+  const tax = calculateTax(subtotal, ctxProvince);
 
   const handleBookingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,12 +88,14 @@ export default function GoalkeeperProfilePage() {
           : new Date().toISOString(),
         durationMinutes: parseInt(ctxDuration),
         captainName,
+        captainEmail,
         captainPhone,
         notes: notes || undefined,
       };
 
       const result = await bookingsApi.create(bookingData);
       setClientSecret(result.clientSecret);
+      setBookingId(result.bookingId);
       setStep('payment');
     } catch (err: unknown) {
       const e = err as { response?: { data?: { error?: string } } };
@@ -162,6 +168,10 @@ export default function GoalkeeperProfilePage() {
               <span className="text-slate-900">{formatCurrency(gkPrice)}</span>
             </div>
             <div className="flex justify-between">
+              <span className="text-slate-500">Service fee (10%)</span>
+              <span className="text-slate-900">{formatCurrency(serviceFee)}</span>
+            </div>
+            <div className="flex justify-between">
               <span className="text-slate-500">Tax ({taxInfo.breakdown})</span>
               <span className="text-slate-900">{formatCurrency(tax.taxAmount)}</span>
             </div>
@@ -172,7 +182,7 @@ export default function GoalkeeperProfilePage() {
           </div>
 
           <Elements stripe={stripePromise} options={{ clientSecret, appearance: { theme: 'stripe' } }}>
-            <PaymentForm onSuccess={() => setStep('success')} />
+            <PaymentForm bookingId={bookingId} onSuccess={() => setStep('success')} />
           </Elements>
         </Card>
       </div>
@@ -220,8 +230,11 @@ export default function GoalkeeperProfilePage() {
               <h2 className="font-semibold text-slate-900">Your Info</h2>
             </div>
             <div className="grid grid-cols-2 gap-4 mb-4">
-              <Input id="name" label="Your Name" placeholder="John Smith" value={captainName} onChange={(e) => setCaptainName(e.target.value)} required />
+              <Input id="name" label="Full Name" placeholder="John Smith" value={captainName} onChange={(e) => setCaptainName(e.target.value)} required />
               <Input id="phone" label="Phone" type="tel" placeholder="+1 416 555 0123" value={captainPhone} onChange={(e) => setCaptainPhone(e.target.value)} required />
+            </div>
+            <div className="mb-4">
+              <Input id="email" label="Email" type="email" placeholder="you@example.com" value={captainEmail} onChange={(e) => setCaptainEmail(e.target.value)} required />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Notes (optional)</label>
@@ -235,11 +248,15 @@ export default function GoalkeeperProfilePage() {
             </div>
           </Card>
 
-          {/* Price breakdown with tax */}
+          {/* Price breakdown with service fee and tax */}
           <div className="p-5 rounded-xl bg-emerald-50 border border-emerald-200 space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-slate-600">Goalkeeper fee</span>
               <span className="text-slate-900">{formatCurrency(gkPrice)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-600">Service fee (10%)</span>
+              <span className="text-slate-900">{formatCurrency(serviceFee)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-600">Tax ({taxInfo.breakdown})</span>
@@ -300,7 +317,7 @@ export default function GoalkeeperProfilePage() {
           <div>
             <p className="text-sm text-slate-500">Price per match</p>
             <p className="text-3xl font-bold text-emerald-600">{formatCurrency(goalkeeper.pricePerMatch)}</p>
-            <p className="text-xs text-slate-400 mt-1">+ {taxInfo.breakdown} tax</p>
+            <p className="text-xs text-slate-400 mt-1">+ 10% service fee + {taxInfo.breakdown} tax</p>
           </div>
           <div className="text-right">
             <p className="text-sm text-slate-500">{goalkeeper.totalReviews} reviews</p>
@@ -328,14 +345,14 @@ export default function GoalkeeperProfilePage() {
 
       {goalkeeper.isAvailable && (
         <Button size="lg" className="w-full" onClick={() => setStep('booking')}>
-          Book This Goalkeeper — {formatCurrency(goalkeeper.pricePerMatch)} + tax
+          Book This Goalkeeper — {formatCurrency(tax.total)}
         </Button>
       )}
     </div>
   );
 }
 
-function PaymentForm({ onSuccess }: { onSuccess: () => void }) {
+function PaymentForm({ bookingId, onSuccess }: { bookingId: string; onSuccess: () => void }) {
   const stripe = useStripe();
   const elements = useElements();
   const [loading, setLoading] = useState(false);
@@ -360,6 +377,10 @@ function PaymentForm({ onSuccess }: { onSuccess: () => void }) {
       setError(confirmError.message || 'Payment failed');
       setLoading(false);
     } else {
+      // Payment succeeded — notify goalkeeper now
+      try {
+        await bookingsApi.paymentComplete(bookingId);
+      } catch { /* notification will still be visible in dashboard */ }
       onSuccess();
     }
   };

@@ -32,6 +32,8 @@ public static class DependencyInjection
         services.AddScoped<INotificationService, NotificationService>();
         services.AddScoped<IPaymentService, PaymentService>();
         services.AddSingleton<IVerificationService, EmailVerificationService>();
+        services.AddScoped<IBookingEmailService, BookingEmailService>();
+        services.AddHostedService<BotAutoDeclineService>();
 
         return services;
     }

@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using GoalieFinder.Application.Common.Interfaces;
 using GoalieFinder.Domain.Entities;
+using GoalieFinder.Infrastructure.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Stripe;
@@ -13,11 +14,13 @@ public class BookingsController : ControllerBase
 {
     private readonly IApplicationDbContext _context;
     private readonly IConfiguration _configuration;
+    private readonly IBookingEmailService _emailService;
 
-    public BookingsController(IApplicationDbContext context, IConfiguration configuration)
+    public BookingsController(IApplicationDbContext context, IConfiguration configuration, IBookingEmailService emailService)
     {
         _context = context;
         _configuration = configuration;
+        _emailService = emailService;
         StripeConfiguration.ApiKey = _configuration["Stripe:SecretKey"];
     }
 
@@ -78,7 +81,7 @@ public class BookingsController : ControllerBase
             Notes = $"Booked by {request.CaptainName} ({request.CaptainPhone}). {request.Notes ?? ""}".Trim(),
             Status = MatchStatus.Open,
             AcceptedGoalkeeperId = gkProfile.Id,
-            TeamProfileId = await GetOrCreateGuestTeamProfileId(request.CaptainName, request.CaptainPhone),
+            TeamProfileId = await GetOrCreateGuestTeamProfileId(request.CaptainName, request.CaptainEmail, request.CaptainPhone),
         };
 
         _context.Matches.Add(match);
@@ -94,16 +97,6 @@ public class BookingsController : ControllerBase
         };
 
         _context.Payments.Add(payment);
-
-        _context.Notifications.Add(new Notification
-        {
-            UserId = gkProfile.UserId,
-            Title = "New Booking Request!",
-            Message = $"{request.CaptainName} wants to book you for {request.FieldName} on {request.MatchDateTime:MMM dd 'at' HH:mm}",
-            Type = NotificationType.MatchRequest,
-            Data = System.Text.Json.JsonSerializer.Serialize(new { matchId = match.Id }),
-        });
-
         await _context.SaveChangesAsync();
 
         return Ok(new
@@ -116,6 +109,55 @@ public class BookingsController : ControllerBase
         });
     }
 
+    /// Called by frontend AFTER Stripe payment succeeds — sends email to goalkeeper
+    [HttpPost("{id}/payment-complete")]
+    public async Task<IActionResult> PaymentComplete(Guid id)
+    {
+        var match = await _context.Matches
+            .Include(m => m.TeamProfile).ThenInclude(t => t.User)
+            .FirstOrDefaultAsync(m => m.Id == id);
+        if (match == null) return NotFound(new { error = "Booking not found" });
+
+        var gkProfile = await _context.GoalkeeperProfiles
+            .Include(g => g.User)
+            .FirstOrDefaultAsync(g => g.Id == match.AcceptedGoalkeeperId);
+        if (gkProfile == null) return NotFound(new { error = "Goalkeeper not found" });
+
+        var payment = await _context.Payments.FirstOrDefaultAsync(p => p.MatchId == id);
+        if (payment == null) return NotFound(new { error = "Payment not found" });
+
+        // Update payment status
+        payment.Status = PaymentStatus.Authorized;
+        await _context.SaveChangesAsync();
+
+        // Now send notification and email
+        _context.Notifications.Add(new Notification
+        {
+            UserId = gkProfile.UserId,
+            Title = "New Booking Request!",
+            Message = $"{match.TeamProfile.User.FirstName} wants to book you for {match.FieldName} on {match.MatchDateTime:MMM dd 'at' HH:mm}",
+            Type = NotificationType.MatchRequest,
+            Data = System.Text.Json.JsonSerializer.Serialize(new { matchId = match.Id }),
+        });
+        await _context.SaveChangesAsync();
+
+        _ = _emailService.SendBookingRequestEmail(
+            goalkeeperEmail: gkProfile.User.Email,
+            goalkeeperName: $"{gkProfile.User.FirstName} {gkProfile.User.LastName}",
+            captainName: $"{match.TeamProfile.User.FirstName} {match.TeamProfile.User.LastName}",
+            captainPhone: match.TeamProfile.User.PhoneNumber,
+            fieldName: match.FieldName,
+            fieldAddress: match.FieldAddress,
+            matchDateTime: match.MatchDateTime,
+            durationMinutes: match.DurationMinutes,
+            goalkeeperFee: match.PaymentAmount,
+            serviceFee: match.PlatformFee,
+            totalAmount: match.TotalAmount,
+            notes: match.Notes);
+
+        return Ok(new { message = "Payment confirmed, goalkeeper notified" });
+    }
+
     [HttpPut("{id}/accept")]
     [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Goalkeeper")]
     public async Task<IActionResult> AcceptBooking(Guid id)
@@ -124,19 +166,21 @@ public class BookingsController : ControllerBase
         var gkProfile = await _context.GoalkeeperProfiles.FirstOrDefaultAsync(g => g.UserId == userId);
         if (gkProfile == null) return NotFound(new { error = "Profile not found" });
 
-        var match = await _context.Matches.FirstOrDefaultAsync(m => m.Id == id && m.AcceptedGoalkeeperId == gkProfile.Id);
+        var match = await _context.Matches
+            .Include(m => m.TeamProfile).ThenInclude(t => t.User)
+            .FirstOrDefaultAsync(m => m.Id == id && m.AcceptedGoalkeeperId == gkProfile.Id);
         if (match == null) return NotFound(new { error = "Booking not found" });
         if (match.Status != MatchStatus.Open) return BadRequest(new { error = "Booking is no longer pending" });
 
         var payment = await _context.Payments.FirstOrDefaultAsync(p => p.MatchId == id);
         if (payment == null) return BadRequest(new { error = "Payment not found" });
 
+        // Capture payment (charge card) — money held by PLATFORM, not sent to goalkeeper yet
         try
         {
             var piService = new PaymentIntentService();
             await piService.CaptureAsync(payment.StripePaymentIntentId);
             payment.Status = PaymentStatus.Captured;
-            payment.CompletedAt = DateTime.UtcNow;
         }
         catch (StripeException ex)
         {
@@ -146,9 +190,137 @@ public class BookingsController : ControllerBase
         match.Status = MatchStatus.Accepted;
         match.UpdatedAt = DateTime.UtcNow;
 
+        // Generate a unique token so captain can confirm match without logging in
+        var confirmToken = Guid.NewGuid().ToString("N");
+        match.Notes = (match.Notes ?? "") + $"\n[CONFIRM_TOKEN:{confirmToken}]";
+
         await _context.SaveChangesAsync();
 
-        return Ok(new { message = "Booking accepted, payment captured" });
+        var gkUser = await _context.Users.FindAsync(gkProfile.UserId);
+        var baseUrl = _configuration["Frontend:BaseUrl"] ?? "https://www.goaliefinders.com";
+        var confirmUrl = $"{baseUrl}/booking/{match.Id}/confirm?token={confirmToken}";
+        var cancelUrl = $"{baseUrl}/booking/{match.Id}/cancel?token={confirmToken}";
+
+        _ = _emailService.SendBookingAcceptedEmail(
+            captainEmail: match.TeamProfile.User.Email,
+            captainName: $"{match.TeamProfile.User.FirstName} {match.TeamProfile.User.LastName}",
+            goalkeeperName: $"{gkUser?.FirstName} {gkUser?.LastName}",
+            goalkeeperPhone: gkUser?.PhoneNumber ?? "",
+            fieldName: match.FieldName,
+            matchDateTime: match.MatchDateTime,
+            totalCharged: match.TotalAmount,
+            confirmUrl: confirmUrl,
+            cancelUrl: cancelUrl);
+
+        return Ok(new { message = "Booking accepted. Payment charged. Goalkeeper will be paid after the match is confirmed." });
+    }
+
+    /// Captain confirms the match happened — releases payment to goalkeeper
+    [HttpPut("{id}/confirm")]
+    public async Task<IActionResult> ConfirmMatch(Guid id, [FromQuery] string token)
+    {
+        var match = await _context.Matches
+            .Include(m => m.Payment)
+            .FirstOrDefaultAsync(m => m.Id == id);
+        if (match == null) return NotFound(new { error = "Booking not found" });
+
+        // Verify confirmation token
+        if (string.IsNullOrEmpty(token) || !(match.Notes ?? "").Contains($"[CONFIRM_TOKEN:{token}]"))
+            return BadRequest(new { error = "Invalid confirmation token" });
+
+        if (match.Status != MatchStatus.Accepted)
+            return BadRequest(new { error = "Match cannot be confirmed in its current state" });
+
+        // Transfer money to goalkeeper
+        var payment = await _context.Payments.FirstOrDefaultAsync(p => p.MatchId == id);
+        var gkProfile = await _context.GoalkeeperProfiles
+            .Include(g => g.User)
+            .FirstOrDefaultAsync(g => g.Id == match.AcceptedGoalkeeperId);
+
+        if (payment != null && gkProfile != null && !string.IsNullOrEmpty(gkProfile.User.StripeConnectAccountId))
+        {
+            try
+            {
+                var transferService = new TransferService();
+                var transfer = await transferService.CreateAsync(new TransferCreateOptions
+                {
+                    Amount = (long)(match.PaymentAmount * 100),
+                    Currency = "cad",
+                    Destination = gkProfile.User.StripeConnectAccountId,
+                    TransferGroup = payment.StripePaymentIntentId,
+                    Description = $"Payout for match at {match.FieldName} on {match.MatchDateTime:MMM dd}",
+                });
+                payment.StripeTransferId = transfer.Id;
+                payment.Status = PaymentStatus.Released;
+                payment.CompletedAt = DateTime.UtcNow;
+            }
+            catch (StripeException ex)
+            {
+                return BadRequest(new { error = $"Transfer failed: {ex.Message}" });
+            }
+        }
+
+        match.Status = MatchStatus.Completed;
+        match.UpdatedAt = DateTime.UtcNow;
+
+        // Update goalkeeper stats
+        if (gkProfile != null)
+        {
+            gkProfile.TotalMatches++;
+        }
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new { message = "Match confirmed! Payment released to goalkeeper." });
+    }
+
+    /// Auto-confirm endpoint — called by a scheduled job or checked on dashboard load
+    [HttpPost("auto-confirm")]
+    public async Task<IActionResult> AutoConfirmExpiredMatches()
+    {
+        var cutoff = DateTime.UtcNow.AddHours(-24);
+
+        var expiredMatches = await _context.Matches
+            .Include(m => m.Payment)
+            .Where(m => m.Status == MatchStatus.Accepted && m.MatchDateTime < cutoff)
+            .ToListAsync();
+
+        var confirmed = 0;
+        foreach (var match in expiredMatches)
+        {
+            var payment = await _context.Payments.FirstOrDefaultAsync(p => p.MatchId == match.Id);
+            var gkProfile = await _context.GoalkeeperProfiles
+                .Include(g => g.User)
+                .FirstOrDefaultAsync(g => g.Id == match.AcceptedGoalkeeperId);
+
+            if (payment != null && gkProfile != null && !string.IsNullOrEmpty(gkProfile.User.StripeConnectAccountId))
+            {
+                try
+                {
+                    var transferService = new TransferService();
+                    var transfer = await transferService.CreateAsync(new TransferCreateOptions
+                    {
+                        Amount = (long)(match.PaymentAmount * 100),
+                        Currency = "cad",
+                        Destination = gkProfile.User.StripeConnectAccountId,
+                        TransferGroup = payment.StripePaymentIntentId,
+                        Description = $"Auto-payout for match at {match.FieldName}",
+                    });
+                    payment.StripeTransferId = transfer.Id;
+                    payment.Status = PaymentStatus.Released;
+                    payment.CompletedAt = DateTime.UtcNow;
+                }
+                catch { /* Log and continue */ }
+            }
+
+            match.Status = MatchStatus.Completed;
+            match.UpdatedAt = DateTime.UtcNow;
+            if (gkProfile != null) gkProfile.TotalMatches++;
+            confirmed++;
+        }
+
+        await _context.SaveChangesAsync();
+        return Ok(new { confirmed, message = $"{confirmed} matches auto-confirmed" });
     }
 
     [HttpPut("{id}/decline")]
@@ -159,7 +331,9 @@ public class BookingsController : ControllerBase
         var gkProfile = await _context.GoalkeeperProfiles.FirstOrDefaultAsync(g => g.UserId == userId);
         if (gkProfile == null) return NotFound(new { error = "Profile not found" });
 
-        var match = await _context.Matches.FirstOrDefaultAsync(m => m.Id == id && m.AcceptedGoalkeeperId == gkProfile.Id);
+        var match = await _context.Matches
+            .Include(m => m.TeamProfile).ThenInclude(t => t.User)
+            .FirstOrDefaultAsync(m => m.Id == id && m.AcceptedGoalkeeperId == gkProfile.Id);
         if (match == null) return NotFound(new { error = "Booking not found" });
 
         var payment = await _context.Payments.FirstOrDefaultAsync(p => p.MatchId == id);
@@ -171,13 +345,21 @@ public class BookingsController : ControllerBase
                 await piService.CancelAsync(payment.StripePaymentIntentId);
                 payment.Status = PaymentStatus.Refunded;
             }
-            catch { }
+            catch { /* Payment may already be cancelled */ }
         }
 
         match.Status = MatchStatus.Cancelled;
         match.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
+
+        var gkUser = await _context.Users.FindAsync(gkProfile.UserId);
+        _ = _emailService.SendBookingDeclinedEmail(
+            captainEmail: match.TeamProfile.User.Email,
+            captainName: $"{match.TeamProfile.User.FirstName} {match.TeamProfile.User.LastName}",
+            goalkeeperName: $"{gkUser?.FirstName} {gkUser?.LastName}",
+            fieldName: match.FieldName,
+            matchDateTime: match.MatchDateTime);
 
         return Ok(new { message = "Booking declined, payment released" });
     }
@@ -199,6 +381,7 @@ public class BookingsController : ControllerBase
             {
                 id = m.Id,
                 captainName = m.TeamProfile.User.FirstName + " " + m.TeamProfile.User.LastName,
+                captainEmail = m.TeamProfile.User.Email,
                 captainPhone = m.TeamProfile.User.PhoneNumber,
                 fieldName = m.FieldName,
                 fieldAddress = m.FieldAddress,
@@ -214,12 +397,136 @@ public class BookingsController : ControllerBase
         return Ok(bookings);
     }
 
-    private async Task<Guid> GetOrCreateGuestTeamProfileId(string name, string phone)
+    /// Captain cancels after goalkeeper accepted — 50% refund only (one-time, token-based)
+    [HttpPut("{id}/captain-cancel")]
+    public async Task<IActionResult> CaptainCancel(Guid id, [FromQuery] string token)
     {
-        var guestEmail = $"guest-{Guid.NewGuid():N}@goaliefinder.local";
+        var match = await _context.Matches
+            .Include(m => m.TeamProfile).ThenInclude(t => t.User)
+            .FirstOrDefaultAsync(m => m.Id == id);
+        if (match == null) return NotFound(new { error = "Booking not found" });
+
+        if (string.IsNullOrEmpty(token) || !(match.Notes ?? "").Contains($"[CONFIRM_TOKEN:{token}]"))
+            return BadRequest(new { error = "Invalid cancellation token" });
+
+        if (match.Status != MatchStatus.Accepted)
+            return BadRequest(new { error = "Can only cancel accepted bookings" });
+
+        // Check if already cancelled (one-time only)
+        if ((match.Notes ?? "").Contains("[CAPTAIN_CANCELLED]"))
+            return BadRequest(new { error = "This booking has already been cancelled" });
+
+        var payment = await _context.Payments.FirstOrDefaultAsync(p => p.MatchId == id);
+        if (payment != null)
+        {
+            try
+            {
+                // Refund 50% only
+                var refundService = new RefundService();
+                await refundService.CreateAsync(new RefundCreateOptions
+                {
+                    PaymentIntent = payment.StripePaymentIntentId,
+                    Amount = (long)(payment.Amount * 100) / 2,
+                    Reason = "requested_by_customer",
+                });
+                payment.Status = PaymentStatus.Refunded;
+            }
+            catch (StripeException ex)
+            {
+                return BadRequest(new { error = $"Refund failed: {ex.Message}" });
+            }
+        }
+
+        match.Status = MatchStatus.Cancelled;
+        match.Notes = (match.Notes ?? "") + "\n[CAPTAIN_CANCELLED]";
+        match.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        // Notify goalkeeper
+        var gkProfile = await _context.GoalkeeperProfiles
+            .Include(g => g.User)
+            .FirstOrDefaultAsync(g => g.Id == match.AcceptedGoalkeeperId);
+
+        if (gkProfile != null)
+        {
+            _context.Notifications.Add(new Notification
+            {
+                UserId = gkProfile.UserId,
+                Title = "Booking Cancelled",
+                Message = $"The booking for {match.FieldName} on {match.MatchDateTime:MMM dd} has been cancelled by the captain.",
+                Type = NotificationType.MatchCancelled,
+            });
+            await _context.SaveChangesAsync();
+        }
+
+        return Ok(new { message = "Booking cancelled. 50% has been refunded." });
+    }
+
+    /// Goalkeeper cancels an accepted booking — 100% refund to captain
+    [HttpPut("{id}/goalkeeper-cancel")]
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Goalkeeper")]
+    public async Task<IActionResult> GoalkeeperCancel(Guid id)
+    {
+        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var gkProfile = await _context.GoalkeeperProfiles.FirstOrDefaultAsync(g => g.UserId == userId);
+        if (gkProfile == null) return NotFound(new { error = "Profile not found" });
+
+        var match = await _context.Matches
+            .Include(m => m.TeamProfile).ThenInclude(t => t.User)
+            .FirstOrDefaultAsync(m => m.Id == id && m.AcceptedGoalkeeperId == gkProfile.Id);
+        if (match == null) return NotFound(new { error = "Booking not found" });
+
+        if (match.Status != MatchStatus.Accepted && match.Status != MatchStatus.Open)
+            return BadRequest(new { error = "Cannot cancel this booking in its current state" });
+
+        var payment = await _context.Payments.FirstOrDefaultAsync(p => p.MatchId == id);
+        if (payment != null)
+        {
+            try
+            {
+                if (payment.Status == PaymentStatus.Captured)
+                {
+                    var refundService = new RefundService();
+                    await refundService.CreateAsync(new RefundCreateOptions
+                    {
+                        PaymentIntent = payment.StripePaymentIntentId,
+                        Reason = "requested_by_customer",
+                    });
+                }
+                else if (payment.Status == PaymentStatus.Authorized)
+                {
+                    var piService = new PaymentIntentService();
+                    await piService.CancelAsync(payment.StripePaymentIntentId);
+                }
+                payment.Status = PaymentStatus.Refunded;
+            }
+            catch (StripeException ex)
+            {
+                return BadRequest(new { error = $"Refund failed: {ex.Message}" });
+            }
+        }
+
+        match.Status = MatchStatus.Cancelled;
+        match.Notes = (match.Notes ?? "") + "\n[GOALKEEPER_CANCELLED]";
+        match.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        var gkUser = await _context.Users.FindAsync(gkProfile.UserId);
+        _ = _emailService.SendGoalkeeperCancelledEmail(
+            captainEmail: match.TeamProfile.User.Email,
+            captainName: $"{match.TeamProfile.User.FirstName} {match.TeamProfile.User.LastName}",
+            goalkeeperName: $"{gkUser?.FirstName} {gkUser?.LastName}",
+            fieldName: match.FieldName,
+            matchDateTime: match.MatchDateTime);
+
+        return Ok(new { message = "Booking cancelled. Captain will receive a full refund." });
+    }
+
+    private async Task<Guid> GetOrCreateGuestTeamProfileId(string name, string email, string phone)
+    {
         var user = new User
         {
-            Email = guestEmail,
+            Email = email,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(Guid.NewGuid().ToString()),
             FirstName = name.Split(' ').FirstOrDefault() ?? name,
             LastName = name.Split(' ').Skip(1).FirstOrDefault() ?? "",
@@ -250,6 +557,7 @@ public record CreateBookingRequest(
     DateTime MatchDateTime,
     int DurationMinutes,
     string CaptainName,
+    string CaptainEmail,
     string CaptainPhone,
     string? Notes
 );

@@ -37,7 +37,7 @@ public class EmailVerificationService : IVerificationService
 
         if (string.IsNullOrEmpty(smtpHost) || string.IsNullOrEmpty(smtpUser))
         {
-            _logger.LogWarning("Email SMTP not configured — returning code directly. Code for {Email}: {Code}", normalized, code);
+            _logger.LogWarning("Email SMTP not configured — code generated for {Email} (check server logs in dev only)", normalized);
             return (true, code);
         }
 
@@ -78,7 +78,7 @@ public class EmailVerificationService : IVerificationService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send email to {Email}. Code: {Code}", normalized, code);
+            _logger.LogError(ex, "Failed to send verification email to {Email}", normalized);
             return (true, code);
         }
     }

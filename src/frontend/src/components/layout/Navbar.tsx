@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useAuth } from '@/lib/auth-context';
 import Button from '@/components/ui/Button';
-import { Menu, X, User, LogOut, Shield } from 'lucide-react';
+import { Menu, X, User, LogOut, Shield, Settings } from 'lucide-react';
 import { useState } from 'react';
 
 export default function Navbar() {
@@ -44,6 +44,9 @@ export default function Navbar() {
                     <User size={16} className="text-emerald-700" />
                   </div>
                   <span className="text-sm font-medium text-slate-700">{user?.firstName}</span>
+                  <Link href="/dashboard/goalkeeper/settings" className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors">
+                    <Settings size={16} className="text-slate-500" />
+                  </Link>
                   <button onClick={logout} className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors">
                     <LogOut size={16} className="text-slate-500" />
                   </button>

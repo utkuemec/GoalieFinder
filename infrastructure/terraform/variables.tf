@@ -34,6 +34,48 @@ variable "jwt_secret" {
   sensitive   = true
 }
 
+variable "stripe_secret_key" {
+  description = "Stripe secret key"
+  type        = string
+  sensitive   = true
+}
+
+variable "stripe_publishable_key" {
+  description = "Stripe publishable key"
+  type        = string
+  sensitive   = true
+}
+
+variable "smtp_host" {
+  description = "SMTP server hostname"
+  type        = string
+  default     = "smtp.gmail.com"
+}
+
+variable "smtp_port" {
+  description = "SMTP server port"
+  type        = string
+  default     = "587"
+}
+
+variable "smtp_user" {
+  description = "SMTP username/email"
+  type        = string
+  sensitive   = true
+}
+
+variable "smtp_password" {
+  description = "SMTP app password"
+  type        = string
+  sensitive   = true
+}
+
+variable "frontend_base_url" {
+  description = "Frontend base URL for email links"
+  type        = string
+  default     = "https://www.goaliefinders.com"
+}
+
 variable "domain_name" {
   description = "Domain name for the application (leave empty to skip DNS setup)"
   type        = string

@@ -1,5 +1,6 @@
 using GoalieFinder.Infrastructure.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace GoalieFinder.API.Controllers;
 
@@ -8,13 +9,16 @@ namespace GoalieFinder.API.Controllers;
 public class VerificationController : ControllerBase
 {
     private readonly IVerificationService _verificationService;
+    private readonly IWebHostEnvironment _env;
 
-    public VerificationController(IVerificationService verificationService)
+    public VerificationController(IVerificationService verificationService, IWebHostEnvironment env)
     {
         _verificationService = verificationService;
+        _env = env;
     }
 
     [HttpPost("send")]
+    [EnableRateLimiting("verification")]
     public async Task<IActionResult> SendCode([FromBody] SendCodeRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Email))
@@ -25,14 +29,15 @@ public class VerificationController : ControllerBase
         if (!success)
             return StatusCode(500, new { error = "Failed to send verification code" });
 
-        // In dev mode (no SMTP configured), return the code so the UI can show it
-        if (code != null)
+        // Only return code in Development mode for testing
+        if (code != null && _env.IsDevelopment())
             return Ok(new { message = "Verification code generated", code });
 
         return Ok(new { message = "Verification code sent to your email" });
     }
 
     [HttpPost("verify")]
+    [EnableRateLimiting("verification")]
     public IActionResult VerifyCode([FromBody] VerifyCodeRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Code))

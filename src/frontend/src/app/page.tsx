@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import Button from '@/components/ui/Button';
-import { Shield, MapPin, CreditCard, Star, Clock, Users, ChevronRight, CheckCircle, Search } from 'lucide-react';
+import { Shield, MapPin, CreditCard, Star, Clock, Users, ChevronRight, CheckCircle, Search, DollarSign, UserPlus, Bell, Handshake } from 'lucide-react';
 
 export default function Home() {
   return (
@@ -19,7 +19,7 @@ export default function Home() {
               <span className="block text-emerald-400">in Minutes</span>
             </h1>
             <p className="mt-6 text-lg text-slate-300 max-w-xl">
-              Need a keeper for tonight&apos;s game? Just fill in your match details and 
+              Need a keeper for tonight&apos;s game? Just fill in your match details and
               find available goalkeepers near your field. No sign-up required.
             </p>
             <div className="mt-10 flex flex-col sm:flex-row gap-4">
@@ -41,11 +41,11 @@ export default function Home() {
         </div>
       </section>
 
-      {/* How It Works */}
+      {/* How It Works — For Teams */}
       <section className="py-20 bg-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold text-slate-900 sm:text-4xl">How It Works</h2>
+            <h2 className="text-3xl font-bold text-slate-900 sm:text-4xl">How It Works for Teams</h2>
             <p className="mt-4 text-lg text-slate-500">Three simple steps to get a goalkeeper for your game</p>
           </div>
           <div className="grid md:grid-cols-3 gap-8">
@@ -53,7 +53,7 @@ export default function Home() {
               {
                 icon: Search,
                 title: '1. Fill in Your Match',
-                desc: 'Enter your city, field address, match date and time. No account needed — just fill the form and search.',
+                desc: 'Select your city, pick a field, enter your match date and time. No account needed — just fill the form and search.',
               },
               {
                 icon: MapPin,
@@ -61,9 +61,9 @@ export default function Home() {
                 desc: 'We instantly show you available goalkeepers near your field with their ratings, experience, and price.',
               },
               {
-                icon: Shield,
-                title: '3. Book & Play',
-                desc: 'Pick a goalkeeper, confirm the match. Show up and play. It\'s that simple.',
+                icon: CreditCard,
+                title: '3. Book & Pay',
+                desc: 'Pick a goalkeeper, pay securely with your card. The goalkeeper gets notified and confirms. Show up and play!',
               },
             ].map((step) => (
               <div key={step.title} className="text-center p-8 rounded-2xl bg-slate-50 hover:bg-emerald-50 transition-colors">
@@ -78,6 +78,59 @@ export default function Home() {
         </div>
       </section>
 
+      {/* How It Works — For Goalkeepers */}
+      <section className="py-20 bg-emerald-50">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <div className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-4 py-1.5 text-sm text-white mb-4">
+              <Shield size={16} /> For Goalkeepers
+            </div>
+            <h2 className="text-3xl font-bold text-slate-900 sm:text-4xl">How It Works for Goalkeepers</h2>
+            <p className="mt-4 text-lg text-slate-500">Get paid to play the sport you love</p>
+          </div>
+          <div className="grid md:grid-cols-4 gap-6">
+            {[
+              {
+                icon: UserPlus,
+                title: '1. Create Your Profile',
+                desc: 'Sign up with Google or email. Set your price, city, travel range, and experience level.',
+              },
+              {
+                icon: Bell,
+                title: '2. Get Booking Requests',
+                desc: 'Teams near you find your profile and send booking requests with match details and payment.',
+              },
+              {
+                icon: Handshake,
+                title: '3. Accept & Play',
+                desc: 'Review the booking, accept it, and show up to play. The team captain confirms attendance after the match.',
+              },
+              {
+                icon: DollarSign,
+                title: '4. Get Paid',
+                desc: 'Payment is released to your bank account automatically via Stripe after the match is confirmed.',
+              },
+            ].map((step) => (
+              <div key={step.title} className="text-center p-6 rounded-2xl bg-white border border-emerald-200 hover:shadow-md transition-all">
+                <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-600 text-white mb-4">
+                  <step.icon size={24} />
+                </div>
+                <h3 className="text-lg font-semibold text-slate-900 mb-2">{step.title}</h3>
+                <p className="text-sm text-slate-500">{step.desc}</p>
+              </div>
+            ))}
+          </div>
+          <div className="text-center mt-10">
+            <Link href="/auth/register">
+              <Button size="lg">
+                <Shield size={20} className="mr-2" />
+                Join as Goalkeeper — It&apos;s Free
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </section>
+
       {/* Features */}
       <section className="py-20 bg-slate-50">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -86,12 +139,12 @@ export default function Home() {
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
-              { icon: Clock, title: 'Fast Matching', desc: 'Find a goalkeeper within minutes, not hours. Real-time notifications to nearby keepers.' },
+              { icon: Clock, title: 'Fast Matching', desc: 'Find a goalkeeper within minutes, not hours. Instant notifications to nearby keepers.' },
               { icon: Star, title: 'Verified & Rated', desc: 'Every goalkeeper is verified. Check ratings and reviews before booking.' },
-              { icon: CreditCard, title: 'Simple Payments', desc: 'Agree on a price directly with the goalkeeper. Pay how you prefer.' },
-              { icon: MapPin, title: 'Location-Based', desc: 'We find goalkeepers near your field. No more coordinating across the city.' },
+              { icon: CreditCard, title: 'Secure Payments', desc: 'Pay securely through Stripe. Money held until the match is confirmed.' },
+              { icon: MapPin, title: '20+ Cities in Canada', desc: 'From Toronto to Vancouver, Montreal to Calgary — 100+ fields across the country.' },
               { icon: Shield, title: 'No Account Needed', desc: 'Teams don\'t need to sign up. Just fill in the form and find your goalkeeper.' },
-              { icon: Users, title: 'Growing Community', desc: 'Join hundreds of teams and goalkeepers in the Toronto area.' },
+              { icon: Users, title: 'Growing Community', desc: 'Join a growing network of teams and goalkeepers across Canada.' },
             ].map((feature) => (
               <div key={feature.title} className="flex gap-4 p-6 rounded-xl bg-white border border-slate-200">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600">
@@ -115,7 +168,7 @@ export default function Home() {
               <h3 className="text-xl font-bold text-slate-900 mb-2">Need a Goalkeeper?</h3>
               <p className="text-slate-500 mb-6">No sign-up needed. Find one in minutes.</p>
               <ul className="space-y-3 mb-6">
-                {['No account required', 'Enter your match details', 'See nearby goalkeepers instantly', 'View ratings & experience', 'Agree on price directly'].map((item) => (
+                {['No account required', 'Choose from 20+ cities', 'See nearby goalkeepers instantly', 'View ratings & experience', 'Secure payment with Stripe'].map((item) => (
                   <li key={item} className="flex items-center gap-2 text-sm text-slate-600">
                     <CheckCircle size={16} className="text-emerald-500 shrink-0" />
                     {item}
@@ -133,7 +186,7 @@ export default function Home() {
               <h3 className="text-xl font-bold text-slate-900 mb-2">Are You a Goalkeeper?</h3>
               <p className="text-slate-500 mb-6">Get paid to play. Set your own rates.</p>
               <ul className="space-y-3 mb-6">
-                {['Free registration', 'Sign up with Google or email', 'Set your own price per match', 'Get found by nearby teams', 'Build your reputation'].map((item) => (
+                {['Free registration', 'Sign up with Google or email', 'Set your own price per match', 'Get paid directly to your bank', 'Build your reputation with reviews'].map((item) => (
                   <li key={item} className="flex items-center gap-2 text-sm text-slate-600">
                     <CheckCircle size={16} className="text-emerald-500 shrink-0" />
                     {item}
@@ -153,7 +206,7 @@ export default function Home() {
         <div className="mx-auto max-w-4xl px-4 text-center">
           <h2 className="text-3xl font-bold text-white sm:text-4xl">Ready to Play?</h2>
           <p className="mt-4 text-lg text-emerald-100">
-            Find a goalkeeper for your next game in Toronto. No sign-up needed.
+            Find a goalkeeper for your next game anywhere in Canada. No sign-up needed.
           </p>
           <div className="mt-10 flex flex-col sm:flex-row justify-center gap-4">
             <Link href="/matches/new">

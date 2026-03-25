@@ -9,7 +9,7 @@ resource "aws_db_subnet_group" "main" {
 resource "aws_db_instance" "main" {
   identifier     = "${var.project_name}-db"
   engine         = "postgres"
-  engine_version = "16.4"
+  engine_version = "16.6"
 
   instance_class        = var.db_instance_class
   allocated_storage     = 20
@@ -25,15 +25,14 @@ resource "aws_db_instance" "main" {
 
   publicly_accessible = false
   multi_az            = false
-  deletion_protection = true
-  skip_final_snapshot = false
-  final_snapshot_identifier = "${var.project_name}-final-snapshot"
+  deletion_protection = false
+  skip_final_snapshot = true
 
   backup_retention_period = 7
   backup_window           = "03:00-04:00"
   maintenance_window      = "Mon:04:00-Mon:05:00"
 
-  performance_insights_enabled = true
+  performance_insights_enabled = false
 
   tags = { Name = "${var.project_name}-db" }
 }

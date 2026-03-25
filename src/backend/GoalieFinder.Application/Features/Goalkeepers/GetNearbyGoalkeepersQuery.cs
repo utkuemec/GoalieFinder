@@ -22,7 +22,7 @@ public class GetNearbyGoalkeepersQueryHandler : IRequestHandler<GetNearbyGoalkee
         var query = request.Query;
         var goalkeepers = await _context.GoalkeeperProfiles
             .Include(g => g.User)
-            .Where(g => g.IsAvailable && g.User.IsActive)
+            .Where(g => g.IsAvailable && g.User.IsActive && g.User.StripeConnectAccountId != null)
             .ToListAsync(cancellationToken);
 
         var nearby = goalkeepers

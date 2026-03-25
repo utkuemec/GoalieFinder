@@ -45,6 +45,12 @@ export default function RegisterPage() {
   const [experienceYears, setExperienceYears] = useState('');
   const [bio, setBio] = useState('');
   const [selectedCity, setSelectedCity] = useState('');
+  const [addressInput, setAddressInput] = useState('');
+  const [addressLat, setAddressLat] = useState<number | null>(null);
+  const [addressLng, setAddressLng] = useState<number | null>(null);
+  const [addressSuggestions, setAddressSuggestions] = useState<Array<{ display: string; lat: number; lng: number }>>([]);
+  const [showAddrSuggestions, setShowAddrSuggestions] = useState(false);
+  const addrTimerRef = useRef<NodeJS.Timeout | null>(null);
   
   const [maxDistance, setMaxDistance] = useState('15');
 
@@ -56,6 +62,31 @@ export default function RegisterPage() {
     const interval = setInterval(() => setResendTimer((t) => t - 1), 1000);
     return () => clearInterval(interval);
   }, [resendTimer]);
+
+  const searchAddress = (query: string) => {
+    if (addrTimerRef.current) clearTimeout(addrTimerRef.current);
+    if (query.length < 3) { setAddressSuggestions([]); setShowAddrSuggestions(false); return; }
+    addrTimerRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&countrycodes=ca&format=json&addressdetails=1&limit=5`,
+          { headers: { 'Accept-Language': 'en' } }
+        );
+        const data = await res.json();
+        const suggestions = data
+          .filter((r: { address?: { road?: string; city?: string; town?: string; village?: string } }) => r.address?.road || r.address?.city || r.address?.town || r.address?.village)
+          .map((r: { display_name: string; lat: string; lon: string }) => ({
+            display: r.display_name,
+            lat: parseFloat(r.lat),
+            lng: parseFloat(r.lon),
+          }));
+        setAddressSuggestions(suggestions);
+        setShowAddrSuggestions(suggestions.length > 0);
+      } catch {
+        setShowAddrSuggestions(false);
+      }
+    }, 400);
+  };
 
   // Handle Google OAuth callback (redirect-based)
   useEffect(() => {
@@ -187,13 +218,13 @@ export default function RegisterPage() {
   const handleProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCity) { setError('Please select your city'); return; }
+    if (!addressLat || !addressLng) { setError('Please enter your address so we can show accurate distances'); return; }
     if (!pricePerMatch || parseFloat(pricePerMatch) < 10) { setError('Please set a price of at least $10'); return; }
     setError('');
     setLoading(true);
     try {
-      const city = CANADIAN_CITIES.find((c) => c.id === selectedCity);
-      const lat = city?.lat || 43.6532;
-      const lng = city?.lng || -79.3832;
+      const lat = addressLat;
+      const lng = addressLng;
 
       if (isGoogleUser) {
         const response = await authApi.googleCompleteRegistration({
@@ -440,16 +471,16 @@ export default function RegisterPage() {
                 <p className="mt-2 text-xs text-slate-500">This is how much teams will see. You can change it anytime.</p>
               </div>
 
-              {/* City */}
+              {/* City & Address */}
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <MapPin size={20} className="text-emerald-600" />
-                  <h2 className="text-base font-semibold text-slate-900">Your City</h2>
+                  <h2 className="text-base font-semibold text-slate-900">Your Location</h2>
                 </div>
                 <select
                   value={selectedCity}
                   onChange={(e) => setSelectedCity(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 mb-3"
                   required
                 >
                   <option value="">Select your city...</option>
@@ -457,6 +488,42 @@ export default function RegisterPage() {
                     <option key={city.id} value={city.id}>{city.name}, {city.province}</option>
                   ))}
                 </select>
+                <div className="relative">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Your address or neighbourhood</label>
+                  <input
+                    placeholder="Start typing your address..."
+                    autoComplete="off"
+                    value={addressInput}
+                    onChange={(e) => { setAddressInput(e.target.value); searchAddress(e.target.value); }}
+                    onFocus={() => { if (addressSuggestions.length > 0) setShowAddrSuggestions(true); }}
+                    onBlur={() => setTimeout(() => setShowAddrSuggestions(false), 200)}
+                    required
+                    className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  />
+                  {showAddrSuggestions && (
+                    <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      {addressSuggestions.map((s, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onMouseDown={() => {
+                            setAddressInput(s.display.split(',').slice(0, 3).join(','));
+                            setAddressLat(s.lat);
+                            setAddressLng(s.lng);
+                            setShowAddrSuggestions(false);
+                          }}
+                          className="w-full text-left px-4 py-2.5 text-sm hover:bg-emerald-50 border-b border-slate-100 last:border-0"
+                        >
+                          <p className="text-slate-900 truncate">{s.display}</p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {addressLat && addressLng && (
+                    <p className="mt-1 text-xs text-emerald-600 flex items-center gap-1"><CheckCircle size={12} /> Location set</p>
+                  )}
+                  <p className="mt-1 text-xs text-slate-400">This helps show accurate distances to nearby fields. Your exact address is never shared.</p>
+                </div>
               </div>
 
               {/* Max distance */}

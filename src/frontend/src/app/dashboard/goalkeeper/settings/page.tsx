@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
@@ -36,6 +36,12 @@ export default function SettingsPage() {
   const [city, setCity] = useState('');
   const [maxDistance, setMaxDistance] = useState('15');
   const [isAvailable, setIsAvailable] = useState(true);
+  const [addressInput, setAddressInput] = useState('');
+  const [addressLat, setAddressLat] = useState<number | null>(null);
+  const [addressLng, setAddressLng] = useState<number | null>(null);
+  const [addressSuggestions, setAddressSuggestions] = useState<Array<{ display: string; lat: number; lng: number }>>([]);
+  const [showAddrSuggestions, setShowAddrSuggestions] = useState(false);
+  const addrTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Google user flag
   const [isGoogleUser, setIsGoogleUser] = useState(false);
@@ -43,6 +49,31 @@ export default function SettingsPage() {
   // Delete
   const [deletePassword, setDeletePassword] = useState('');
   const [showDelete, setShowDelete] = useState(false);
+
+  const searchAddr = (query: string) => {
+    if (addrTimerRef.current) clearTimeout(addrTimerRef.current);
+    if (query.length < 3) { setAddressSuggestions([]); setShowAddrSuggestions(false); return; }
+    addrTimerRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&countrycodes=ca&format=json&addressdetails=1&limit=5`,
+          { headers: { 'Accept-Language': 'en' } }
+        );
+        const data = await res.json();
+        const suggestions = data
+          .filter((r: { address?: { road?: string; city?: string; town?: string; village?: string } }) => r.address?.road || r.address?.city || r.address?.town || r.address?.village)
+          .map((r: { display_name: string; lat: string; lon: string }) => ({
+            display: r.display_name,
+            lat: parseFloat(r.lat),
+            lng: parseFloat(r.lon),
+          }));
+        setAddressSuggestions(suggestions);
+        setShowAddrSuggestions(suggestions.length > 0);
+      } catch {
+        setShowAddrSuggestions(false);
+      }
+    }, 400);
+  };
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -59,6 +90,8 @@ export default function SettingsPage() {
           setBio(data.goalkeeper.bio || '');
           setMaxDistance(data.goalkeeper.maxTravelDistanceKm?.toString() || '15');
           setIsAvailable(data.goalkeeper.isAvailable ?? true);
+          setAddressLat(data.goalkeeper.latitude);
+          setAddressLng(data.goalkeeper.longitude);
 
           const matchedCity = CANADIAN_CITIES.find(
             (c) => Math.abs(c.lat - data.goalkeeper.latitude) < 0.5 && Math.abs(c.lng - data.goalkeeper.longitude) < 0.5
@@ -119,12 +152,14 @@ export default function SettingsPage() {
     setError('');
     try {
       const selectedCity = CANADIAN_CITIES.find((c) => c.id === city);
+      const lat = addressLat || selectedCity?.lat;
+      const lng = addressLng || selectedCity?.lng;
       await profileApi.updateGoalkeeper({
         pricePerMatch: parseFloat(price) || undefined,
         experienceYears: parseInt(experience) || undefined,
         bio: bio || undefined,
-        latitude: selectedCity?.lat,
-        longitude: selectedCity?.lng,
+        latitude: lat,
+        longitude: lng,
         maxTravelDistanceKm: parseInt(maxDistance),
         isAvailable,
       });
@@ -237,13 +272,48 @@ export default function SettingsPage() {
               <div>
                 <div className="flex items-center gap-1 mb-1">
                   <MapPin size={14} className="text-emerald-600" />
-                  <label className="text-sm font-medium text-slate-700">Your City</label>
+                  <label className="text-sm font-medium text-slate-700">Your Location</label>
                 </div>
                 <select value={city} onChange={(e) => setCity(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+                  className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 mb-3">
                   <option value="">Select city...</option>
                   {CANADIAN_CITIES.map((c) => <option key={c.id} value={c.id}>{c.name}, {c.province}</option>)}
                 </select>
+                <div className="relative">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Your address or neighbourhood</label>
+                  <input
+                    placeholder="Start typing your address..."
+                    autoComplete="off"
+                    value={addressInput}
+                    onChange={(e) => { setAddressInput(e.target.value); searchAddr(e.target.value); }}
+                    onFocus={() => { if (addressSuggestions.length > 0) setShowAddrSuggestions(true); }}
+                    onBlur={() => setTimeout(() => setShowAddrSuggestions(false), 200)}
+                    className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  />
+                  {showAddrSuggestions && (
+                    <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      {addressSuggestions.map((s, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onMouseDown={() => {
+                            setAddressInput(s.display.split(',').slice(0, 3).join(','));
+                            setAddressLat(s.lat);
+                            setAddressLng(s.lng);
+                            setShowAddrSuggestions(false);
+                          }}
+                          className="w-full text-left px-4 py-2.5 text-sm hover:bg-emerald-50 border-b border-slate-100 last:border-0"
+                        >
+                          <p className="text-slate-900 truncate">{s.display}</p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {addressLat && addressLng && (
+                    <p className="mt-1 text-xs text-emerald-600 flex items-center gap-1"><CheckCircle size={12} /> Location set</p>
+                  )}
+                  <p className="mt-1 text-xs text-slate-400">Update your address for accurate distance calculations. Your exact address is never shared.</p>
+                </div>
               </div>
 
               <div>

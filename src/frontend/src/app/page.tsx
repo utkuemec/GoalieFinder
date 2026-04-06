@@ -1,10 +1,82 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import Button from '@/components/ui/Button';
+import { CANADIAN_CITIES } from '@/lib/fields-data';
 import { Shield, MapPin, CreditCard, Star, Clock, Users, ChevronRight, CheckCircle, Search, DollarSign, UserPlus, Bell, Handshake } from 'lucide-react';
 
+export const metadata: Metadata = {
+  title: 'GoalieFinder — Rent a Goalkeeper for Your Soccer Game in Canada',
+  description:
+    'Rent a goalkeeper or goalie for your soccer match anywhere in Canada. Browse verified goalkeepers, book instantly, and pay securely. No sign-up needed. 20+ cities.',
+  alternates: { canonical: 'https://www.goaliefinders.com' },
+};
+
 export default function Home() {
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Service',
+    name: 'GoalieFinder — Rent a Goalkeeper in Canada',
+    description:
+      'Rent a goalkeeper for your soccer game anywhere in Canada. Browse verified goalkeepers, compare prices, and book instantly online.',
+    provider: {
+      '@type': 'Organization',
+      name: 'GoalieFinder',
+      url: 'https://www.goaliefinders.com',
+    },
+    areaServed: { '@type': 'Country', name: 'Canada' },
+    serviceType: 'Goalkeeper Rental',
+  };
+
+  const faqJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: [
+      {
+        '@type': 'Question',
+        name: 'How do I rent a goalkeeper for my soccer game?',
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: 'Go to GoalieFinder, select your city and field, enter your match date and time, browse available goalkeepers near you, and book instantly with a secure card payment. No sign-up is required for teams.',
+        },
+      },
+      {
+        '@type': 'Question',
+        name: 'How much does it cost to rent a goalkeeper?',
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: 'Goalkeepers set their own prices, typically ranging from $15 to $50 per match depending on the city and experience level. You can compare prices before booking.',
+        },
+      },
+      {
+        '@type': 'Question',
+        name: 'Which cities can I rent a goalkeeper in?',
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: 'GoalieFinder covers 20+ cities across Canada including Toronto, Vancouver, Montreal, Calgary, Edmonton, Ottawa, Winnipeg, Hamilton, and more.',
+        },
+      },
+      {
+        '@type': 'Question',
+        name: 'How do I become a goalkeeper on GoalieFinder?',
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: 'Sign up for free with Google or email, set your price per match, city, and travel range. Once you set up payouts, you\'ll start appearing in searches and can accept bookings.',
+        },
+      },
+    ],
+  };
+
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+      />
+
       {/* Hero Section */}
       <section className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-900">
         <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-10" />
@@ -15,12 +87,12 @@ export default function Home() {
               Now serving 20+ cities across Canada
             </div>
             <h1 className="text-4xl font-bold tracking-tight text-white sm:text-6xl lg:text-7xl">
-              Find a Goalkeeper
-              <span className="block text-emerald-400">in Minutes</span>
+              Rent a Goalkeeper
+              <span className="block text-emerald-400">for Your Soccer Game</span>
             </h1>
             <p className="mt-6 text-lg text-slate-300 max-w-xl">
-              Need a keeper for tonight&apos;s game? Just fill in your match details and
-              find available goalkeepers near your field. No sign-up required.
+              Need a goalie for tonight&apos;s game? Rent a goalkeeper in minutes &mdash; just
+              fill in your match details and find available keepers near your field. No sign-up required.
             </p>
             <div className="mt-10 flex flex-col sm:flex-row gap-4">
               <Link href="/matches/new">
@@ -45,8 +117,8 @@ export default function Home() {
       <section className="py-20 bg-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold text-slate-900 sm:text-4xl">How It Works for Teams</h2>
-            <p className="mt-4 text-lg text-slate-500">Three simple steps to get a goalkeeper for your game</p>
+            <h2 className="text-3xl font-bold text-slate-900 sm:text-4xl">How to Rent a Goalkeeper</h2>
+            <p className="mt-4 text-lg text-slate-500">Three simple steps to rent a goalie for your soccer game</p>
           </div>
           <div className="grid md:grid-cols-3 gap-8">
             {[
@@ -135,7 +207,7 @@ export default function Home() {
       <section className="py-20 bg-slate-50">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold text-slate-900 sm:text-4xl">Why GoalieFinder?</h2>
+            <h2 className="text-3xl font-bold text-slate-900 sm:text-4xl">Why Rent a Goalkeeper with GoalieFinder?</h2>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
@@ -201,12 +273,72 @@ export default function Home() {
         </div>
       </section>
 
+      {/* FAQ Section */}
+      <section className="py-20 bg-slate-50">
+        <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
+          <h2 className="text-3xl font-bold text-slate-900 sm:text-4xl text-center mb-12">
+            Frequently Asked Questions
+          </h2>
+          <div className="space-y-6">
+            {[
+              {
+                q: 'How do I rent a goalkeeper for my soccer game?',
+                a: 'Go to "Find a Goalkeeper", select your city and field, enter your match date and time, browse available goalkeepers near you, and book instantly with a secure card payment. No sign-up is required for teams.',
+              },
+              {
+                q: 'How much does it cost to rent a goalkeeper?',
+                a: 'Goalkeepers set their own prices, typically ranging from $15 to $50 CAD per match depending on the city and experience level. You can compare prices before booking.',
+              },
+              {
+                q: 'Which cities can I rent a goalkeeper in?',
+                a: 'GoalieFinder covers 20+ cities across Canada including Toronto, Vancouver, Montreal, Calgary, Edmonton, Ottawa, Winnipeg, Hamilton, Mississauga, Brampton, and more.',
+              },
+              {
+                q: 'Can I cancel a booking after the goalkeeper accepts?',
+                a: 'Yes. Captains receive a one-time cancellation link via email after the goalkeeper accepts. A 50% refund is issued for captain cancellations. Goalkeepers can also cancel from their dashboard for a 100% refund to the team.',
+              },
+              {
+                q: 'How do I become a goalkeeper on GoalieFinder and get paid?',
+                a: 'Sign up for free with Google or email, set your price per match, your city, and travel range. Once you complete payout setup via Stripe, you\'ll start appearing in searches and can accept bookings. Payments are deposited directly to your bank account.',
+              },
+            ].map((faq) => (
+              <details key={faq.q} className="group rounded-xl border border-slate-200 bg-white">
+                <summary className="flex cursor-pointer items-center justify-between p-6 text-slate-900 font-semibold">
+                  {faq.q}
+                  <ChevronRight size={18} className="text-slate-400 transition-transform group-open:rotate-90" />
+                </summary>
+                <div className="px-6 pb-6 text-slate-500 text-sm leading-relaxed">{faq.a}</div>
+              </details>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* City Links */}
+      <section className="py-16 bg-white">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <h2 className="text-2xl font-bold text-slate-900 mb-2">Rent a Goalkeeper Across Canada</h2>
+          <p className="text-slate-500 mb-8">Find a goalie for your soccer game in any of these cities</p>
+          <div className="flex flex-wrap gap-2">
+            {CANADIAN_CITIES.map((city) => (
+              <Link
+                key={city.id}
+                href={`/rent-a-goalkeeper/${city.name.toLowerCase().replace(/[\s'.]+/g, '-')}`}
+                className="text-sm px-4 py-2 rounded-full bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 transition-colors"
+              >
+                {city.name}
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* CTA */}
       <section className="py-20 bg-emerald-600">
         <div className="mx-auto max-w-4xl px-4 text-center">
-          <h2 className="text-3xl font-bold text-white sm:text-4xl">Ready to Play?</h2>
+          <h2 className="text-3xl font-bold text-white sm:text-4xl">Ready to Rent a Goalkeeper?</h2>
           <p className="mt-4 text-lg text-emerald-100">
-            Find a goalkeeper for your next game anywhere in Canada. No sign-up needed.
+            Find a goalie for your next soccer game anywhere in Canada. No sign-up needed.
           </p>
           <div className="mt-10 flex flex-col sm:flex-row justify-center gap-4">
             <Link href="/matches/new">

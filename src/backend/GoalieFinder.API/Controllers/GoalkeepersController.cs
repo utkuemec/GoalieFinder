@@ -46,7 +46,7 @@ public class GoalkeepersController : ControllerBase
             g.Id, g.UserId,
             $"{g.User.FirstName} {g.User.LastName}",
             g.User.ProfilePhotoUrl,
-            g.PricePerMatch, g.ExperienceYears, g.Bio,
+            g.PricePerMatch, g.ExperienceYears, g.Bio, g.City,
             g.Latitude, g.Longitude, g.MaxTravelDistanceKm,
             g.Rating, g.TotalMatches, g.TotalReviews,
             g.IsAvailable, null)).ToList();
@@ -99,7 +99,7 @@ public class GoalkeepersController : ControllerBase
             profile.Id, profile.UserId,
             $"{profile.User.FirstName} {profile.User.LastName}",
             profile.User.ProfilePhotoUrl,
-            profile.PricePerMatch, profile.ExperienceYears, profile.Bio,
+            profile.PricePerMatch, profile.ExperienceYears, profile.Bio, profile.City,
             profile.Latitude, profile.Longitude, profile.MaxTravelDistanceKm,
             profile.Rating, profile.TotalMatches, profile.TotalReviews,
             profile.IsAvailable, null);
@@ -258,6 +258,13 @@ public class GoalkeepersController : ControllerBase
         {
             var accountService = new AccountService();
             var account = await accountService.GetAsync(user.StripeConnectAccountId);
+
+            var requirements = account.Requirements;
+            var currentlyDue = requirements?.CurrentlyDue?.ToList() ?? new List<string>();
+            var isRestricted = !account.PayoutsEnabled && currentlyDue.Count > 0;
+            var needsVerification = currentlyDue.Any(r =>
+                r.Contains("verification") || r.Contains("proof_of_liveness") || r.Contains("document"));
+
             return Ok(new
             {
                 connected = true,
@@ -265,11 +272,45 @@ public class GoalkeepersController : ControllerBase
                 chargesEnabled = account.ChargesEnabled,
                 accountId = account.Id,
                 detailsSubmitted = account.DetailsSubmitted,
+                isRestricted,
+                needsVerification,
+                currentlyDue,
+                disabledReason = requirements?.DisabledReason,
             });
         }
         catch
         {
             return Ok(new { connected = false, payoutsEnabled = false, accountId = user.StripeConnectAccountId });
+        }
+    }
+
+    [HttpPost("connect/verification-link")]
+    [Authorize(Roles = "Goalkeeper")]
+    public async Task<IActionResult> CreateVerificationLink()
+    {
+        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var user = await _context.Users.FindAsync(userId);
+        if (user == null) return NotFound(new { error = "User not found" });
+
+        if (string.IsNullOrEmpty(user.StripeConnectAccountId))
+            return BadRequest(new { error = "No Stripe account found. Please set up payouts first." });
+
+        try
+        {
+            var service = new AccountLinkService();
+            var link = await service.CreateAsync(new AccountLinkCreateOptions
+            {
+                Account = user.StripeConnectAccountId,
+                RefreshUrl = $"{_configuration["Frontend:BaseUrl"]}/dashboard/goalkeeper?stripe_refresh=1",
+                ReturnUrl = $"{_configuration["Frontend:BaseUrl"]}/dashboard/goalkeeper?stripe_verified=1",
+                Type = "account_onboarding",
+            });
+
+            return Ok(new { url = link.Url });
+        }
+        catch (StripeException ex)
+        {
+            return BadRequest(new { error = $"Failed to create verification link: {ex.Message}" });
         }
     }
 }

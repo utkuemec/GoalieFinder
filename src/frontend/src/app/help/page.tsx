@@ -1,3 +1,11 @@
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'Help Center',
+  description:
+    'Get answers to common questions about renting a goalkeeper, booking, payments, cancellations, and more on GoalieFinder.',
+};
+
 export default function HelpCenter() {
   return (
     <div className="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-8">

@@ -13,10 +13,14 @@ public class Match
     public int DurationMinutes { get; set; } = 60;
     public decimal PaymentAmount { get; set; }
     public decimal PlatformFee { get; set; }
+    public decimal TaxRate { get; set; }
+    public decimal TaxAmount { get; set; }
+    public decimal StripeFee { get; set; }
     public decimal TotalAmount { get; set; }
     public string? Notes { get; set; }
     public MatchStatus Status { get; set; } = MatchStatus.Open;
     public Guid? AcceptedGoalkeeperId { get; set; }
+    public GoalkeeperProfile? AcceptedGoalkeeper { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

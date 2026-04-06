@@ -8,6 +8,7 @@ public record GoalkeeperProfileDto(
     decimal PricePerMatch,
     int ExperienceYears,
     string? Bio,
+    string? City,
     double Latitude,
     double Longitude,
     int MaxTravelDistanceKm,

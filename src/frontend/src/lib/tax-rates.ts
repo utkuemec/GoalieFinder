@@ -30,15 +30,20 @@ export function calculateTax(amount: number, provinceCode: string): {
   taxAmount: number;
   taxRate: number;
   taxLabel: string;
+  stripeFee: number;
   total: number;
 } {
   const info = getTaxInfo(provinceCode);
   const taxAmount = Math.round(amount * info.rate * 100) / 100;
+  const subtotalWithTax = amount + taxAmount;
+  // Stripe Canada: 2.9% + $0.30 — solve so net covers all costs
+  const stripeFee = Math.round(((subtotalWithTax * 0.029 + 0.30) / (1 - 0.029)) * 100) / 100;
   return {
     subtotal: amount,
     taxAmount,
     taxRate: info.rate,
     taxLabel: info.breakdown,
-    total: Math.round((amount + taxAmount) * 100) / 100,
+    stripeFee,
+    total: Math.round((subtotalWithTax + stripeFee) * 100) / 100,
   };
 }

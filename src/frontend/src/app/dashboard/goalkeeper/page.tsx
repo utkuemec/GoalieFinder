@@ -1,24 +1,35 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import Card from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import { useAuth } from '@/lib/auth-context';
-import { bookingsApi, goalkeepersApi, type BookingListItem } from '@/lib/api';
+import { bookingsApi, goalkeepersApi, profileApi, type BookingListItem } from '@/lib/api';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
-import { DollarSign, Trophy, Star, MapPin, Bell, Loader2, CheckCircle, XCircle, Clock, Phone, CreditCard, AlertTriangle } from 'lucide-react';
+import { DollarSign, Trophy, Star, MapPin, Bell, Loader2, CheckCircle, XCircle, Clock, Phone, CreditCard, AlertTriangle, Settings, Edit3, Shield } from 'lucide-react';
 import Input from '@/components/ui/Input';
+
+interface GoalkeeperProfileData {
+  pricePerMatch?: number;
+  experienceYears?: number;
+  bio?: string;
+  maxTravelDistanceKm?: number;
+  isAvailable?: boolean;
+}
 
 export default function GoalkeeperDashboard() {
   const { user } = useAuth();
   const [bookings, setBookings] = useState<BookingListItem[]>([]);
   const [loadingBookings, setLoadingBookings] = useState(true);
+  const [profile, setProfile] = useState<{ firstName?: string; lastName?: string; phoneNumber?: string; goalkeeper?: GoalkeeperProfileData } | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [connectStatus, setConnectStatus] = useState<{ connected: boolean; payoutsEnabled: boolean; detailsSubmitted?: boolean } | null>(null);
+  const [connectStatus, setConnectStatus] = useState<{ connected: boolean; payoutsEnabled: boolean; detailsSubmitted?: boolean; isRestricted?: boolean; needsVerification?: boolean; currentlyDue?: string[]; disabledReason?: string } | null>(null);
   const [connectLoading, setConnectLoading] = useState(false);
   const [showPayoutForm, setShowPayoutForm] = useState(false);
   const [payoutError, setPayoutError] = useState('');
+  const [verificationLoading, setVerificationLoading] = useState(false);
 
   // Payout form fields
   const [dobDay, setDobDay] = useState('');
@@ -38,12 +49,14 @@ export default function GoalkeeperDashboard() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [bookingsData, statusData] = await Promise.all([
+        const [bookingsData, statusData, profileData] = await Promise.all([
           bookingsApi.myRequests(),
           goalkeepersApi.connectStatus(),
+          profileApi.get(),
         ]);
         setBookings(bookingsData);
         setConnectStatus(statusData);
+        setProfile(profileData);
       } catch {
         console.error('Failed to fetch data');
       } finally {
@@ -153,6 +166,18 @@ export default function GoalkeeperDashboard() {
     }
   };
 
+  const handleStartVerification = async () => {
+    setVerificationLoading(true);
+    try {
+      const { url } = await goalkeepersApi.verificationLink();
+      window.location.href = url;
+    } catch {
+      alert('Failed to create verification link. Please try again.');
+    } finally {
+      setVerificationLoading(false);
+    }
+  };
+
   const pendingBookings = bookings.filter((b) => b.status === 'Open');
   const confirmedBookings = bookings.filter((b) => b.status === 'Accepted');
   const completedBookings = bookings.filter((b) => b.status === 'Completed');
@@ -188,6 +213,74 @@ export default function GoalkeeperDashboard() {
         ))}
       </div>
 
+      {/* My Profile Quick View */}
+      {profile?.goalkeeper && (
+        <Card className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Edit3 size={20} className="text-emerald-600" />
+              <h2 className="text-lg font-semibold text-slate-900">My Profile</h2>
+            </div>
+            <Link href="/dashboard/goalkeeper/settings">
+              <Button variant="outline" className="text-sm">
+                <Settings size={16} className="mr-1.5" /> Edit Profile
+              </Button>
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="p-3 rounded-lg bg-slate-50">
+              <p className="text-xs text-slate-500 mb-0.5">Price per match</p>
+              <p className="text-lg font-bold text-slate-900">${profile.goalkeeper.pricePerMatch || '—'}</p>
+            </div>
+            <div className="p-3 rounded-lg bg-slate-50">
+              <p className="text-xs text-slate-500 mb-0.5">Experience</p>
+              <p className="text-lg font-bold text-slate-900">{profile.goalkeeper.experienceYears || 0} yrs</p>
+            </div>
+            <div className="p-3 rounded-lg bg-slate-50">
+              <p className="text-xs text-slate-500 mb-0.5">Travel range</p>
+              <p className="text-lg font-bold text-slate-900">{profile.goalkeeper.maxTravelDistanceKm || 15} km</p>
+            </div>
+            <div className="p-3 rounded-lg bg-slate-50">
+              <p className="text-xs text-slate-500 mb-0.5">Status</p>
+              <p className={`text-lg font-bold ${profile.goalkeeper.isAvailable !== false ? 'text-emerald-600' : 'text-red-500'}`}>
+                {profile.goalkeeper.isAvailable !== false ? 'Available' : 'Unavailable'}
+              </p>
+            </div>
+          </div>
+          {profile.goalkeeper.bio && (
+            <div className="mt-3 p-3 rounded-lg bg-slate-50">
+              <p className="text-xs text-slate-500 mb-0.5">Bio</p>
+              <p className="text-sm text-slate-700 line-clamp-2">{profile.goalkeeper.bio}</p>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* Identity Verification Banner — for restricted accounts */}
+      {connectStatus?.isRestricted && connectStatus.needsVerification && (
+        <Card className="mb-8 border-l-4 border-l-red-400">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <AlertTriangle size={20} className="text-red-500" />
+                <h3 className="font-semibold text-slate-900">Identity Verification Required</h3>
+              </div>
+              <p className="text-sm text-slate-500">
+                Stripe requires you to verify your identity to enable payouts. This is a one-time step — you&apos;ll need to take a quick selfie to confirm your identity.
+                Your account is restricted until this is completed.
+              </p>
+            </div>
+            <Button
+              onClick={handleStartVerification}
+              isLoading={verificationLoading}
+              className="shrink-0 bg-red-600 hover:bg-red-700"
+            >
+              <Shield size={18} className="mr-1.5" /> Verify Identity
+            </Button>
+          </div>
+        </Card>
+      )}
+
       {/* Payout Setup Banner — only show if no Stripe account connected at all */}
       {connectStatus && !connectStatus.payoutsEnabled && !connectStatus.connected && (
         <Card className="mb-8 border-l-4 border-l-amber-400">
@@ -207,6 +300,32 @@ export default function GoalkeeperDashboard() {
               </Button>
             )}
           </div>
+
+          {/* Warning: Not bookable until payout setup */}
+          {!showPayoutForm && (
+            <div className="mt-4 rounded-lg bg-red-50 border border-red-200 p-4">
+              <div className="flex gap-3">
+                <div className="shrink-0 mt-0.5">
+                  <AlertTriangle size={18} className="text-red-500" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-red-800">You are not visible to teams yet!</p>
+                  <p className="text-sm text-red-700 mt-1">
+                    You will <strong>not appear in search results</strong> and <strong>cannot receive bookings</strong> until you complete the payout setup above.
+                    Once your bank account is connected, teams will be able to find and book you immediately.
+                  </p>
+                  <div className="mt-3 text-xs text-red-600 space-y-1">
+                    <p className="font-semibold">How do you get paid?</p>
+                    <ul className="list-disc ml-4 space-y-0.5 text-red-600/90">
+                      <li>When a captain books and you accept, the payment is secured automatically.</li>
+                      <li>After the match, your earnings are transferred directly to your bank account via Stripe.</li>
+                      <li>Funds typically arrive in <strong>2-3 business days</strong> — no manual action needed from you.</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {showPayoutForm && (
             <form onSubmit={handlePayoutSubmit} className="mt-6 border-t border-slate-200 pt-6 space-y-4">
@@ -290,7 +409,7 @@ export default function GoalkeeperDashboard() {
         </Card>
       )}
 
-      {connectStatus?.connected && !connectStatus.payoutsEnabled && (
+      {connectStatus?.connected && !connectStatus.payoutsEnabled && !connectStatus.isRestricted && (
         <Card className="mb-8 border-l-4 border-l-blue-400 bg-blue-50/50">
           <div className="flex items-center gap-3">
             <Clock size={20} className="text-blue-600" />
@@ -395,15 +514,19 @@ export default function GoalkeeperDashboard() {
                 </div>
                 <div className="flex items-center justify-between mt-3">
                   <p className="text-lg font-bold text-emerald-600">{formatCurrency(booking.paymentAmount)}</p>
-                  <Button
-                    variant="danger"
-                    onClick={() => handleGoalkeeperCancel(booking.id)}
-                    isLoading={actionLoading === booking.id}
-                    disabled={actionLoading !== null}
-                    className="text-xs px-3 py-1"
-                  >
-                    Cancel
-                  </Button>
+                  {new Date(booking.matchDateTime).getTime() - Date.now() > 3600000 ? (
+                    <Button
+                      variant="danger"
+                      onClick={() => handleGoalkeeperCancel(booking.id)}
+                      isLoading={actionLoading === booking.id}
+                      disabled={actionLoading !== null}
+                      className="text-xs px-3 py-1"
+                    >
+                      Cancel
+                    </Button>
+                  ) : (
+                    <span className="text-xs text-slate-400 italic">Cannot cancel within 1h</span>
+                  )}
                 </div>
               </Card>
             ))}

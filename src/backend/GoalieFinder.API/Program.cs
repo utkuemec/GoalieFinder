@@ -117,9 +117,43 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     if (db.Database.IsInMemory())
+    {
         await db.Database.EnsureCreatedAsync();
+    }
     else
+    {
         await db.Database.CanConnectAsync();
+
+        var alterStatements = new[]
+        {
+            "ALTER TABLE matches ADD COLUMN IF NOT EXISTS tax_rate numeric(5,4) DEFAULT 0",
+            "ALTER TABLE matches ADD COLUMN IF NOT EXISTS tax_amount numeric(10,2) DEFAULT 0",
+            "ALTER TABLE payments ADD COLUMN IF NOT EXISTS tax_amount numeric(10,2) DEFAULT 0",
+            "ALTER TABLE payments ADD COLUMN IF NOT EXISTS stripe_charge_id varchar(255)",
+            "ALTER TABLE matches ADD COLUMN IF NOT EXISTS stripe_fee numeric(10,2) DEFAULT 0",
+            "ALTER TABLE payments ADD COLUMN IF NOT EXISTS stripe_fee numeric(10,2) DEFAULT 0",
+            "ALTER TABLE goalkeeper_profiles ADD COLUMN IF NOT EXISTS city varchar(100)",
+            "CREATE INDEX IF NOT EXISTS ix_matches_accepted_goalkeeper_id ON matches(accepted_goalkeeper_id)",
+        };
+
+        foreach (var sql in alterStatements)
+        {
+            try { await db.Database.ExecuteSqlRawAsync(sql); }
+            catch { /* Column already exists */ }
+        }
+
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                @"DO $$ BEGIN
+                    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_matches_accepted_goalkeeper') THEN
+                        ALTER TABLE matches ADD CONSTRAINT fk_matches_accepted_goalkeeper
+                        FOREIGN KEY (accepted_goalkeeper_id) REFERENCES goalkeeper_profiles(id) ON DELETE SET NULL;
+                    END IF;
+                END $$");
+        }
+        catch { /* FK already exists */ }
+    }
 }
 
 // Security headers

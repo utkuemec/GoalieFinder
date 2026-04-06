@@ -42,6 +42,7 @@ public class ProfileController : ControllerBase
                 gkProfile.PricePerMatch,
                 gkProfile.ExperienceYears,
                 gkProfile.Bio,
+                gkProfile.City,
                 gkProfile.Latitude,
                 gkProfile.Longitude,
                 gkProfile.MaxTravelDistanceKm,
@@ -97,6 +98,7 @@ public class ProfileController : ControllerBase
         if (request.PricePerMatch.HasValue) profile.PricePerMatch = request.PricePerMatch.Value;
         if (request.ExperienceYears.HasValue) profile.ExperienceYears = request.ExperienceYears.Value;
         if (request.Bio != null) profile.Bio = request.Bio;
+        if (request.City != null) profile.City = request.City;
         if (request.Latitude.HasValue) profile.Latitude = request.Latitude.Value;
         if (request.Longitude.HasValue) profile.Longitude = request.Longitude.Value;
         if (request.MaxTravelDistanceKm.HasValue) profile.MaxTravelDistanceKm = request.MaxTravelDistanceKm.Value;
@@ -130,5 +132,5 @@ public class ProfileController : ControllerBase
 
 public record UpdatePersonalRequest(string? FirstName, string? LastName, string? PhoneNumber);
 public record ChangePasswordRequest(string CurrentPassword, string NewPassword);
-public record UpdateGoalkeeperRequest(decimal? PricePerMatch, int? ExperienceYears, string? Bio, double? Latitude, double? Longitude, int? MaxTravelDistanceKm, bool? IsAvailable);
+public record UpdateGoalkeeperRequest(decimal? PricePerMatch, int? ExperienceYears, string? Bio, string? City, double? Latitude, double? Longitude, int? MaxTravelDistanceKm, bool? IsAvailable);
 public record DeleteAccountRequest(string? Password);

@@ -44,7 +44,7 @@ public class GetNearbyGoalkeepersQueryHandler : IRequestHandler<GetNearbyGoalkee
                 x.Profile.Id, x.Profile.UserId,
                 $"{x.Profile.User.FirstName} {x.Profile.User.LastName}",
                 x.Profile.User.ProfilePhotoUrl,
-                x.Profile.PricePerMatch, x.Profile.ExperienceYears, x.Profile.Bio,
+                x.Profile.PricePerMatch, x.Profile.ExperienceYears, x.Profile.Bio, x.Profile.City,
                 x.Profile.Latitude, x.Profile.Longitude, x.Profile.MaxTravelDistanceKm,
                 x.Profile.Rating, x.Profile.TotalMatches, x.Profile.TotalReviews,
                 x.Profile.IsAvailable, Math.Round(x.Distance, 1)))

@@ -154,6 +154,7 @@ public class AuthController : ControllerBase
             PricePerMatch = request.PricePerMatch,
             ExperienceYears = request.ExperienceYears,
             Bio = request.Bio ?? "",
+            City = request.City,
             Latitude = request.Latitude,
             Longitude = request.Longitude,
             MaxTravelDistanceKm = request.MaxTravelDistanceKm,
@@ -205,6 +206,7 @@ public record GoogleCompleteRequest(
     decimal PricePerMatch,
     int ExperienceYears,
     string? Bio,
+    string? City,
     double Latitude,
     double Longitude,
     int MaxTravelDistanceKm

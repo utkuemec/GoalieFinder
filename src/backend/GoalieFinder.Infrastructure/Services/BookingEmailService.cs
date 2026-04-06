@@ -45,18 +45,35 @@ public interface IBookingEmailService
         string goalkeeperName,
         string fieldName,
         DateTime matchDateTime);
+
+    Task SendPaymentReleasedEmail(
+        string goalkeeperEmail,
+        string goalkeeperName,
+        string fieldName,
+        DateTime matchDateTime,
+        decimal payoutAmount);
+
+    Task SendPayoutSetupReminderEmail(
+        string goalkeeperEmail,
+        string goalkeeperName,
+        bool hasCompletedPayout);
 }
 
 public class BookingEmailService : IBookingEmailService
 {
     private readonly ILogger<BookingEmailService> _logger;
     private readonly IConfiguration _configuration;
+    private static readonly TimeZoneInfo EasternTz = TimeZoneInfo.FindSystemTimeZoneById("America/Toronto");
 
     public BookingEmailService(ILogger<BookingEmailService> logger, IConfiguration configuration)
     {
         _logger = logger;
         _configuration = configuration;
     }
+
+    private static DateTime ToLocal(DateTime utc) =>
+        TimeZoneInfo.ConvertTimeFromUtc(
+            DateTime.SpecifyKind(utc, DateTimeKind.Utc), EasternTz);
 
     public async Task SendBookingRequestEmail(
         string goalkeeperEmail,
@@ -102,7 +119,7 @@ public class BookingEmailService : IBookingEmailService
         </tr>
         <tr>
           <td style='padding:8px 0;color:#64748b;font-size:14px;border-top:1px solid #e2e8f0'>Date & Time</td>
-          <td style='padding:8px 0;color:#1e293b;font-weight:bold;text-align:right;border-top:1px solid #e2e8f0'>{matchDateTime:dddd, MMMM dd, yyyy 'at' h:mm tt}</td>
+          <td style='padding:8px 0;color:#1e293b;font-weight:bold;text-align:right;border-top:1px solid #e2e8f0'>{ToLocal(matchDateTime):dddd, MMMM dd, yyyy 'at' h:mm tt}</td>
         </tr>
         <tr>
           <td style='padding:8px 0;color:#64748b;font-size:14px'>Duration</td>
@@ -185,7 +202,7 @@ public class BookingEmailService : IBookingEmailService
         <tr><td style='padding:6px 0;color:#64748b;font-size:14px'>Goalkeeper</td><td style='padding:6px 0;color:#1e293b;font-weight:bold;text-align:right'>{goalkeeperName}</td></tr>
         <tr><td style='padding:6px 0;color:#64748b;font-size:14px'>Phone</td><td style='padding:6px 0;color:#1e293b;font-weight:bold;text-align:right'>{goalkeeperPhone}</td></tr>
         <tr><td style='padding:6px 0;color:#64748b;font-size:14px'>Field</td><td style='padding:6px 0;color:#1e293b;font-weight:bold;text-align:right'>{fieldName}</td></tr>
-        <tr><td style='padding:6px 0;color:#64748b;font-size:14px'>Date & Time</td><td style='padding:6px 0;color:#1e293b;font-weight:bold;text-align:right'>{matchDateTime:dddd, MMM dd 'at' h:mm tt}</td></tr>
+        <tr><td style='padding:6px 0;color:#64748b;font-size:14px'>Date & Time</td><td style='padding:6px 0;color:#1e293b;font-weight:bold;text-align:right'>{ToLocal(matchDateTime):dddd, MMM dd 'at' h:mm tt}</td></tr>
         <tr><td style='padding:6px 0;color:#64748b;font-size:14px;border-top:1px solid #bbf7d0'>Total Charged</td><td style='padding:6px 0;color:#059669;font-weight:bold;font-size:18px;text-align:right;border-top:1px solid #bbf7d0'>${totalCharged:F2} CAD</td></tr>
       </table>
     </div>
@@ -218,7 +235,7 @@ public class BookingEmailService : IBookingEmailService
   </div>
   <div style='background:white;padding:32px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px'>
     <p style='font-size:16px;color:#1e293b'>Hey {captainName},</p>
-    <p style='color:#64748b'>Unfortunately, <strong>{goalkeeperName}</strong> is unable to accept your booking for <strong>{fieldName}</strong> on <strong>{matchDateTime:MMM dd 'at' h:mm tt}</strong>.</p>
+    <p style='color:#64748b'>Unfortunately, <strong>{goalkeeperName}</strong> is unable to accept your booking for <strong>{fieldName}</strong> on <strong>{ToLocal(matchDateTime):MMM dd 'at' h:mm tt}</strong>.</p>
     <p style='color:#64748b'>The hold on your card has been <strong>released</strong> — you will not be charged.</p>
     <div style='text-align:center;margin:24px 0'>
       <a href='https://goaliefinders.com/matches/new' style='display:inline-block;background:#059669;color:white;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold'>
@@ -247,7 +264,7 @@ public class BookingEmailService : IBookingEmailService
   </div>
   <div style='background:white;padding:32px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px'>
     <p style='font-size:16px;color:#1e293b'>Hey {captainName},</p>
-    <p style='color:#64748b'>Unfortunately, <strong>{goalkeeperName}</strong> has cancelled the booking for <strong>{fieldName}</strong> on <strong>{matchDateTime:MMM dd 'at' h:mm tt}</strong>.</p>
+    <p style='color:#64748b'>Unfortunately, <strong>{goalkeeperName}</strong> has cancelled the booking for <strong>{fieldName}</strong> on <strong>{ToLocal(matchDateTime):MMM dd 'at' h:mm tt}</strong>.</p>
     <div style='background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:20px 0;text-align:center'>
       <p style='margin:0;color:#059669;font-weight:bold;font-size:16px'>100% Refund Issued</p>
       <p style='margin:4px 0 0;color:#64748b;font-size:14px'>The full amount has been refunded to your card.</p>
@@ -303,5 +320,143 @@ public class BookingEmailService : IBookingEmailService
         {
             _logger.LogError(ex, "Failed to send email to {To}", to);
         }
+    }
+
+    public async Task SendPaymentReleasedEmail(
+        string goalkeeperEmail, string goalkeeperName,
+        string fieldName, DateTime matchDateTime, decimal payoutAmount)
+    {
+        var subject = $"Payment Received — ${payoutAmount:F2} CAD for your match";
+        var body = $@"
+<div style=""font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:600px;margin:0 auto;padding:20px"">
+  <div style=""background:#10b981;padding:24px;border-radius:12px 12px 0 0;text-align:center"">
+    <h1 style=""color:white;margin:0;font-size:24px"">Payment Received!</h1>
+  </div>
+  <div style=""background:#f8fafc;padding:24px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px"">
+    <p style=""color:#334155;font-size:16px"">Hi {goalkeeperName},</p>
+    <p style=""color:#334155;font-size:16px"">Great news! Your payment has been released for your completed match.</p>
+    <div style=""background:white;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:16px 0"">
+      <table style=""width:100%;border-collapse:collapse"">
+        <tr><td style=""color:#64748b;padding:8px 0"">Match</td><td style=""color:#0f172a;font-weight:600;text-align:right;padding:8px 0"">{fieldName}</td></tr>
+        <tr><td style=""color:#64748b;padding:8px 0"">Date</td><td style=""color:#0f172a;font-weight:600;text-align:right;padding:8px 0"">{ToLocal(matchDateTime):MMMM dd, yyyy 'at' h:mm tt}</td></tr>
+        <tr style=""border-top:2px solid #10b981""><td style=""color:#10b981;font-weight:700;padding:12px 0;font-size:18px"">Amount Paid</td><td style=""color:#10b981;font-weight:700;text-align:right;padding:12px 0;font-size:18px"">${payoutAmount:F2} CAD</td></tr>
+      </table>
+    </div>
+    <p style=""color:#64748b;font-size:14px"">The funds will be deposited to your connected bank account via Stripe. This typically takes 2-3 business days.</p>
+    <p style=""color:#64748b;font-size:14px;margin-top:16px"">Thank you for using GoalieFinder!</p>
+  </div>
+</div>";
+
+        await SendEmail(goalkeeperEmail, subject, body);
+    }
+
+    public async Task SendPayoutSetupReminderEmail(
+        string goalkeeperEmail, string goalkeeperName, bool hasCompletedPayout)
+    {
+        var subject = "GoalieFinder — We're Growing! Here's What You Need to Know";
+
+        var ctaSection = hasCompletedPayout
+            ? @"
+    <div style='background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:20px;margin:20px 0;text-align:center'>
+      <p style='margin:0;color:#059669;font-weight:bold;font-size:16px'>&#10003; Your payout setup is complete!</p>
+      <p style='margin:8px 0 0;color:#64748b;font-size:14px'>You&rsquo;re all set to receive bookings and get paid. No action needed.</p>
+    </div>"
+            : @"
+    <div style='background:#fef3c7;border:1px solid #fde68a;border-radius:8px;padding:20px;margin:20px 0'>
+      <p style='margin:0 0 8px;color:#92400e;font-weight:bold;font-size:16px'>&#9888; Action Required: Complete Your Payout Setup</p>
+      <p style='margin:0 0 16px;color:#78350f;font-size:14px'>
+        You are <strong>not visible to teams</strong> and <strong>cannot receive bookings</strong> until you set up your bank account.
+        It only takes 2 minutes!
+      </p>
+      <div style='text-align:center'>
+        <a href='https://goaliefinders.com/dashboard/goalkeeper' style='display:inline-block;background:#059669;color:white;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px'>
+          Complete Payout Setup Now
+        </a>
+      </div>
+    </div>";
+
+        var body = $@"
+<div style='font-family:-apple-system,BlinkMacSystemFont,""Segoe UI"",Roboto,sans-serif;max-width:600px;margin:0 auto;padding:0'>
+  <div style='background:#059669;padding:28px;text-align:center;border-radius:12px 12px 0 0'>
+    <h1 style='color:white;margin:0;font-size:26px'>GoalieFinder is Growing!</h1>
+    <p style='color:#d1fae5;margin:8px 0 0;font-size:14px'>Thank you for being part of our community</p>
+  </div>
+  <div style='background:white;padding:32px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px'>
+    <p style='font-size:16px;color:#1e293b'>Hi {goalkeeperName},</p>
+    <p style='color:#64748b;font-size:15px;line-height:1.6'>
+      Thank you for joining GoalieFinder! We&rsquo;re improving every day to connect goalkeepers like you
+      with teams across Canada. Your support means everything to us.
+    </p>
+
+    {ctaSection}
+
+    <div style='background:#f8fafc;border-radius:8px;padding:24px;margin:24px 0'>
+      <h3 style='margin:0 0 16px;color:#1e293b;font-size:16px'>&#128176; How You Get Paid</h3>
+      <table style='width:100%;border-collapse:collapse'>
+        <tr>
+          <td style='padding:10px 12px;vertical-align:top;width:32px'>
+            <div style='background:#d1fae5;color:#059669;width:28px;height:28px;border-radius:50%;text-align:center;line-height:28px;font-weight:bold;font-size:14px'>1</div>
+          </td>
+          <td style='padding:10px 0;color:#475569;font-size:14px'>
+            <strong style='color:#1e293b'>A captain books you</strong><br/>
+            They pay upfront. The payment is held securely by Stripe.
+          </td>
+        </tr>
+        <tr>
+          <td style='padding:10px 12px;vertical-align:top'>
+            <div style='background:#d1fae5;color:#059669;width:28px;height:28px;border-radius:50%;text-align:center;line-height:28px;font-weight:bold;font-size:14px'>2</div>
+          </td>
+          <td style='padding:10px 0;color:#475569;font-size:14px'>
+            <strong style='color:#1e293b'>You accept the booking</strong><br/>
+            The payment is captured. You&rsquo;ll see full match details and captain contact info.
+          </td>
+        </tr>
+        <tr>
+          <td style='padding:10px 12px;vertical-align:top'>
+            <div style='background:#d1fae5;color:#059669;width:28px;height:28px;border-radius:50%;text-align:center;line-height:28px;font-weight:bold;font-size:14px'>3</div>
+          </td>
+          <td style='padding:10px 0;color:#475569;font-size:14px'>
+            <strong style='color:#1e293b'>After the match, you get paid automatically</strong><br/>
+            Your earnings are transferred directly to your bank account.
+            Funds arrive in <strong>2&ndash;3 business days</strong>. No action needed from you!
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <div style='background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px;margin:20px 0'>
+      <p style='margin:0;color:#1e40af;font-size:14px'>
+        <strong>&#128161; Tip:</strong> You can view your earnings and upcoming matches anytime on your
+        <a href='https://goaliefinders.com/dashboard/goalkeeper' style='color:#059669;font-weight:bold'>dashboard</a>.
+        Your money goes straight to the bank account you provided &mdash; no need to log into Stripe or transfer anything manually.
+      </p>
+    </div>
+
+    <p style='color:#64748b;font-size:14px;margin-top:24px'>
+      If you&rsquo;ve already completed your payout setup, you can safely ignore this email.
+      We&rsquo;re just making sure every goalkeeper is ready to earn!
+    </p>
+
+    <p style='color:#64748b;font-size:14px;margin-top:16px'>
+      Have questions? Reply to this email and we&rsquo;ll get back to you.
+    </p>
+
+    <p style='color:#1e293b;font-size:14px;margin-top:24px'>
+      Best,<br/>
+      <strong>The GoalieFinder Team</strong>
+    </p>
+
+    <div style='border-top:1px solid #e2e8f0;margin-top:32px;padding-top:16px;text-align:center'>
+      <p style='color:#94a3b8;font-size:12px;margin:0'>
+        GoalieFinder Canada &mdash; Connecting goalkeepers with teams across Canada
+      </p>
+      <p style='color:#cbd5e1;font-size:11px;margin:4px 0 0'>
+        <a href='https://goaliefinders.com' style='color:#94a3b8'>goaliefinders.com</a>
+      </p>
+    </div>
+  </div>
+</div>";
+
+        await SendEmail(goalkeeperEmail, subject, body);
     }
 }

@@ -8,6 +8,7 @@ public class GoalkeeperProfile
     public decimal PricePerMatch { get; set; }
     public int ExperienceYears { get; set; }
     public string? Bio { get; set; }
+    public string? City { get; set; }
     public double Latitude { get; set; }
     public double Longitude { get; set; }
     public int MaxTravelDistanceKm { get; set; } = 15;
@@ -20,4 +21,5 @@ public class GoalkeeperProfile
 
     public ICollection<GoalkeeperAvailability> Availabilities { get; set; } = new List<GoalkeeperAvailability>();
     public ICollection<MatchAcceptance> MatchAcceptances { get; set; } = new List<MatchAcceptance>();
+    public ICollection<Match> AcceptedMatches { get; set; } = new List<Match>();
 }

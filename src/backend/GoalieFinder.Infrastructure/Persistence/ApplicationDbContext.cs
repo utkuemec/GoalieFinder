@@ -37,6 +37,7 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
             entity.HasOne(e => e.User).WithOne(u => u.GoalkeeperProfile)
                 .HasForeignKey<GoalkeeperProfile>(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
             entity.Property(e => e.PricePerMatch).HasColumnType("decimal(10,2)");
+            entity.Property(e => e.City).HasMaxLength(100);
             entity.HasIndex(e => new { e.Latitude, e.Longitude });
             entity.HasIndex(e => e.IsAvailable);
         });
@@ -61,13 +62,19 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
             entity.HasKey(e => e.Id);
             entity.HasOne(e => e.TeamProfile).WithMany(t => t.Matches)
                 .HasForeignKey(e => e.TeamProfileId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.AcceptedGoalkeeper).WithMany(g => g.AcceptedMatches)
+                .HasForeignKey(e => e.AcceptedGoalkeeperId).OnDelete(DeleteBehavior.SetNull);
             entity.Property(e => e.PaymentAmount).HasColumnType("decimal(10,2)");
             entity.Property(e => e.PlatformFee).HasColumnType("decimal(10,2)");
+            entity.Property(e => e.TaxRate).HasColumnType("decimal(5,4)");
+            entity.Property(e => e.TaxAmount).HasColumnType("decimal(10,2)");
+            entity.Property(e => e.StripeFee).HasColumnType("decimal(10,2)");
             entity.Property(e => e.TotalAmount).HasColumnType("decimal(10,2)");
             entity.Property(e => e.FieldName).HasMaxLength(200);
             entity.Property(e => e.FieldAddress).HasMaxLength(500);
             entity.HasIndex(e => e.Status);
             entity.HasIndex(e => e.MatchDateTime);
+            entity.HasIndex(e => e.AcceptedGoalkeeperId);
             entity.HasIndex(e => new { e.FieldLatitude, e.FieldLongitude });
         });
 
@@ -99,8 +106,11 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
                 .HasForeignKey<Payment>(e => e.MatchId).OnDelete(DeleteBehavior.Cascade);
             entity.Property(e => e.Amount).HasColumnType("decimal(10,2)");
             entity.Property(e => e.PlatformFee).HasColumnType("decimal(10,2)");
+            entity.Property(e => e.TaxAmount).HasColumnType("decimal(10,2)");
             entity.Property(e => e.GoalkeeperPayout).HasColumnType("decimal(10,2)");
+            entity.Property(e => e.StripeFee).HasColumnType("decimal(10,2)");
             entity.Property(e => e.StripePaymentIntentId).HasMaxLength(256);
+            entity.Property(e => e.StripeChargeId).HasMaxLength(255);
         });
 
         modelBuilder.Entity<Notification>(entity =>

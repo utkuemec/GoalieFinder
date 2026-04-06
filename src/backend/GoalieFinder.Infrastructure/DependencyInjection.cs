@@ -34,6 +34,7 @@ public static class DependencyInjection
         services.AddSingleton<IVerificationService, EmailVerificationService>();
         services.AddScoped<IBookingEmailService, BookingEmailService>();
         services.AddHostedService<BotAutoDeclineService>();
+        services.AddHostedService<AutoPayoutService>();
 
         return services;
     }

@@ -80,7 +80,9 @@ export const goalkeepersApi = {
     transitNumber: string; institutionNumber: string; accountNumber: string;
   }) => api.post<{ message: string; accountId: string }>('/goalkeepers/connect/onboard', data).then((res) => res.data),
   connectStatus: () =>
-    api.get<{ connected: boolean; payoutsEnabled: boolean; chargesEnabled?: boolean; accountId?: string; detailsSubmitted?: boolean }>('/goalkeepers/connect/status').then((res) => res.data),
+    api.get<{ connected: boolean; payoutsEnabled: boolean; chargesEnabled?: boolean; accountId?: string; detailsSubmitted?: boolean; isRestricted?: boolean; needsVerification?: boolean; currentlyDue?: string[]; disabledReason?: string }>('/goalkeepers/connect/status').then((res) => res.data),
+  verificationLink: () =>
+    api.post<{ url: string }>('/goalkeepers/connect/verification-link').then((res) => res.data),
   updateProfile: (data: {
     pricePerMatch: number;
     experienceYears: number;
@@ -103,6 +105,7 @@ export interface BookingRequest {
   captainName: string;
   captainEmail: string;
   captainPhone: string;
+  provinceCode?: string;
   notes?: string;
 }
 
@@ -149,7 +152,7 @@ export const profileApi = {
     api.put('/profile/personal', data).then((res) => res.data),
   changePassword: (data: { currentPassword: string; newPassword: string }) =>
     api.put('/profile/password', data).then((res) => res.data),
-  updateGoalkeeper: (data: { pricePerMatch?: number; experienceYears?: number; bio?: string; latitude?: number; longitude?: number; maxTravelDistanceKm?: number; isAvailable?: boolean }) =>
+  updateGoalkeeper: (data: { pricePerMatch?: number; experienceYears?: number; bio?: string; city?: string; latitude?: number; longitude?: number; maxTravelDistanceKm?: number; isAvailable?: boolean }) =>
     api.put('/profile/goalkeeper', data).then((res) => res.data),
   deleteAccount: (password?: string) =>
     api.delete('/profile', { data: { password } }).then((res) => res.data),
@@ -158,6 +161,17 @@ export const profileApi = {
 export const reviewsApi = {
   create: (data: { matchId: string; revieweeId: string; rating: number; comment?: string }) =>
     api.post('/reviews', data).then((res) => res.data),
+};
+
+export const adminApi = {
+  getBookings: (params?: { status?: string; page?: number; pageSize?: number }) =>
+    api.get('/admin/bookings', { params }).then((res) => res.data),
+  getGoalkeepers: (params?: { page?: number; pageSize?: number }) =>
+    api.get('/admin/goalkeepers', { params }).then((res) => res.data),
+  getUsers: (params?: { page?: number; pageSize?: number }) =>
+    api.get('/admin/users', { params }).then((res) => res.data),
+  getStats: () =>
+    api.get('/admin/stats').then((res) => res.data),
 };
 
 export default api;

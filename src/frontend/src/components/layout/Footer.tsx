@@ -19,7 +19,7 @@ export default function Footer() {
             <h3 className="text-sm font-semibold text-slate-900 mb-3">Platform</h3>
             <ul className="space-y-2 text-sm text-slate-500">
               <li><Link href="/matches/new" className="hover:text-emerald-600">Find a Goalkeeper</Link></li>
-              <li><Link href="/goalkeepers" className="hover:text-emerald-600">Browse Goalkeepers</Link></li>
+              <li><Link href="/matches/new" className="hover:text-emerald-600">Find a Goalkeeper</Link></li>
               <li><Link href="/auth/register" className="hover:text-emerald-600">Join as Goalkeeper</Link></li>
             </ul>
           </div>

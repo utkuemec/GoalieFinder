@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
@@ -23,6 +23,7 @@ type PageStep = 'profile' | 'booking' | 'payment' | 'success';
 export default function GoalkeeperProfilePage() {
   const params = useParams();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const id = params.id as string;
 
   // Read search context from URL
@@ -38,6 +39,12 @@ export default function GoalkeeperProfilePage() {
   const [goalkeeper, setGoalkeeper] = useState<GoalkeeperProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState<PageStep>('profile');
+
+  useEffect(() => {
+    if (!ctxField || !ctxDate || !ctxTime) {
+      router.replace('/matches/new');
+    }
+  }, [ctxField, ctxDate, ctxTime, router]);
 
   // Booking form — captain info + notes
   const [captainName, setCaptainName] = useState('');
@@ -90,6 +97,7 @@ export default function GoalkeeperProfilePage() {
         captainName,
         captainEmail,
         captainPhone,
+        provinceCode: ctxProvince,
         notes: notes || undefined,
       };
 
@@ -175,6 +183,10 @@ export default function GoalkeeperProfilePage() {
               <span className="text-slate-500">Tax ({taxInfo.breakdown})</span>
               <span className="text-slate-900">{formatCurrency(tax.taxAmount)}</span>
             </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Processing fee</span>
+              <span className="text-slate-900">{formatCurrency(tax.stripeFee)}</span>
+            </div>
             <div className="flex justify-between border-t border-slate-200 pt-1.5 font-semibold">
               <span className="text-slate-900">Total hold</span>
               <span className="text-emerald-600">{formatCurrency(tax.total)}</span>
@@ -248,7 +260,7 @@ export default function GoalkeeperProfilePage() {
             </div>
           </Card>
 
-          {/* Price breakdown with service fee and tax */}
+          {/* Price breakdown with service fee, tax, and processing fee */}
           <div className="p-5 rounded-xl bg-emerald-50 border border-emerald-200 space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-slate-600">Goalkeeper fee</span>
@@ -261,6 +273,10 @@ export default function GoalkeeperProfilePage() {
             <div className="flex justify-between">
               <span className="text-slate-600">Tax ({taxInfo.breakdown})</span>
               <span className="text-slate-900">{formatCurrency(tax.taxAmount)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-600">Processing fee</span>
+              <span className="text-slate-900">{formatCurrency(tax.stripeFee)}</span>
             </div>
             <div className="flex justify-between font-bold border-t border-emerald-200 pt-2">
               <span className="text-slate-900">Total</span>
@@ -317,7 +333,7 @@ export default function GoalkeeperProfilePage() {
           <div>
             <p className="text-sm text-slate-500">Price per match</p>
             <p className="text-3xl font-bold text-emerald-600">{formatCurrency(goalkeeper.pricePerMatch)}</p>
-            <p className="text-xs text-slate-400 mt-1">+ 10% service fee + {taxInfo.breakdown} tax</p>
+            <p className="text-xs text-slate-400 mt-1">+ 10% service fee + tax + processing fee</p>
           </div>
           <div className="text-right">
             <p className="text-sm text-slate-500">{goalkeeper.totalReviews} reviews</p>

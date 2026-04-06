@@ -55,8 +55,22 @@ export default function FindGoalkeeperPage() {
     setStep('form');
   };
 
+  const [formError, setFormError] = useState('');
+
+  const fieldIsSelected = !!selectedField || !!customFieldName.trim();
+  const gameDetailsComplete = fieldIsSelected && !!matchDate && !!matchTime;
+
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!fieldIsSelected) {
+      setFormError('Please select a field or enter a custom location name.');
+      return;
+    }
+    if (!matchDate || !matchTime) {
+      setFormError('Please select a date and time for the game.');
+      return;
+    }
+    setFormError('');
     setLoading(true);
     try {
       const lat = selectedField?.lat || selectedCity?.lat || 43.6532;
@@ -296,10 +310,20 @@ export default function FindGoalkeeperPage() {
           </div>
         </Card>
 
-        <Button type="submit" size="lg" className="w-full" isLoading={loading}>
+        {formError && (
+          <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">{formError}</div>
+        )}
+
+        <Button type="submit" size="lg" className="w-full" isLoading={loading} disabled={!gameDetailsComplete}>
           {loading ? <Loader2 size={20} className="mr-2 animate-spin" /> : <Search size={20} className="mr-2" />}
           Find Available Goalkeepers
         </Button>
+
+        {!gameDetailsComplete && (
+          <p className="text-center text-sm text-slate-400">
+            Please select a field and game date/time above to search for goalkeepers
+          </p>
+        )}
       </form>
     </div>
   );

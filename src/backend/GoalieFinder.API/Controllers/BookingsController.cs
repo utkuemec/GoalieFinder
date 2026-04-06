@@ -39,7 +39,13 @@ public class BookingsController : ControllerBase
 
         var amount = gkProfile.PricePerMatch;
         var platformFee = amount * 0.10m;
-        var totalAmount = amount + platformFee;
+        var subtotal = amount + platformFee;
+        var taxRate = GetProvincialTaxRate(request.ProvinceCode ?? "ON");
+        var taxAmount = Math.Round(subtotal * taxRate, 2);
+        var subtotalWithTax = subtotal + taxAmount;
+        // Stripe Canada: 2.9% + $0.30 — solve for fee so net covers all costs
+        var stripeFee = Math.Round((subtotalWithTax * 0.029m + 0.30m) / (1 - 0.029m), 2);
+        var totalAmount = subtotalWithTax + stripeFee;
 
         var piService = new PaymentIntentService();
         var piOptions = new PaymentIntentCreateOptions
@@ -77,6 +83,9 @@ public class BookingsController : ControllerBase
             DurationMinutes = request.DurationMinutes,
             PaymentAmount = amount,
             PlatformFee = platformFee,
+            TaxRate = taxRate,
+            TaxAmount = taxAmount,
+            StripeFee = stripeFee,
             TotalAmount = totalAmount,
             Notes = $"Booked by {request.CaptainName} ({request.CaptainPhone}). {request.Notes ?? ""}".Trim(),
             Status = MatchStatus.Open,
@@ -92,6 +101,8 @@ public class BookingsController : ControllerBase
             StripePaymentIntentId = paymentIntent.Id,
             Amount = totalAmount,
             PlatformFee = platformFee,
+            TaxAmount = taxAmount,
+            StripeFee = stripeFee,
             GoalkeeperPayout = amount,
             Status = PaymentStatus.Pending,
         };
@@ -106,6 +117,9 @@ public class BookingsController : ControllerBase
             amount = totalAmount,
             goalkeeperName = $"{gkProfile.User.FirstName} {gkProfile.User.LastName}",
             goalkeeperPrice = amount,
+            platformFee,
+            taxAmount,
+            stripeFee,
         });
     }
 
@@ -126,11 +140,19 @@ public class BookingsController : ControllerBase
         var payment = await _context.Payments.FirstOrDefaultAsync(p => p.MatchId == id);
         if (payment == null) return NotFound(new { error = "Payment not found" });
 
-        // Update payment status
+        if (payment.Status != PaymentStatus.Pending)
+            return Ok(new { message = "Already processed" });
+
+        // Verify with Stripe that the payment was actually authorized
+        var piService = new PaymentIntentService();
+        var pi = await piService.GetAsync(payment.StripePaymentIntentId);
+        if (pi.Status != "requires_capture" && pi.Status != "succeeded")
+            return BadRequest(new { error = "Payment has not been completed. Please enter your card details and pay first." });
+
         payment.Status = PaymentStatus.Authorized;
         await _context.SaveChangesAsync();
 
-        // Now send notification and email
+        // Payment verified — now send notification and email
         _context.Notifications.Add(new Notification
         {
             UserId = gkProfile.UserId,
@@ -179,8 +201,9 @@ public class BookingsController : ControllerBase
         try
         {
             var piService = new PaymentIntentService();
-            await piService.CaptureAsync(payment.StripePaymentIntentId);
+            var capturedPi = await piService.CaptureAsync(payment.StripePaymentIntentId);
             payment.Status = PaymentStatus.Captured;
+            payment.StripeChargeId = capturedPi.LatestChargeId;
         }
         catch (StripeException ex)
         {
@@ -241,18 +264,42 @@ public class BookingsController : ControllerBase
         {
             try
             {
-                var transferService = new TransferService();
-                var transfer = await transferService.CreateAsync(new TransferCreateOptions
+                var chargeId = payment.StripeChargeId;
+                if (string.IsNullOrEmpty(chargeId))
+                {
+                    var piService = new PaymentIntentService();
+                    var pi = await piService.GetAsync(payment.StripePaymentIntentId);
+                    chargeId = pi.LatestChargeId;
+                    payment.StripeChargeId = chargeId;
+                }
+
+                var transferOpts = new TransferCreateOptions
                 {
                     Amount = (long)(match.PaymentAmount * 100),
                     Currency = "cad",
                     Destination = gkProfile.User.StripeConnectAccountId,
                     TransferGroup = payment.StripePaymentIntentId,
                     Description = $"Payout for match at {match.FieldName} on {match.MatchDateTime:MMM dd}",
-                });
+                };
+                if (!string.IsNullOrEmpty(chargeId))
+                    transferOpts.SourceTransaction = chargeId;
+
+                var transferService = new TransferService();
+                var transfer = await transferService.CreateAsync(transferOpts);
                 payment.StripeTransferId = transfer.Id;
                 payment.Status = PaymentStatus.Released;
                 payment.CompletedAt = DateTime.UtcNow;
+
+                try
+                {
+                    await _emailService.SendPaymentReleasedEmail(
+                        gkProfile.User.Email,
+                        $"{gkProfile.User.FirstName} {gkProfile.User.LastName}",
+                        match.FieldName,
+                        match.MatchDateTime,
+                        match.PaymentAmount);
+                }
+                catch { /* Non-critical */ }
             }
             catch (StripeException ex)
             {
@@ -263,7 +310,6 @@ public class BookingsController : ControllerBase
         match.Status = MatchStatus.Completed;
         match.UpdatedAt = DateTime.UtcNow;
 
-        // Update goalkeeper stats
         if (gkProfile != null)
         {
             gkProfile.TotalMatches++;
@@ -297,15 +343,28 @@ public class BookingsController : ControllerBase
             {
                 try
                 {
-                    var transferService = new TransferService();
-                    var transfer = await transferService.CreateAsync(new TransferCreateOptions
+                    var chargeId = payment.StripeChargeId;
+                    if (string.IsNullOrEmpty(chargeId))
+                    {
+                        var piService = new PaymentIntentService();
+                        var pi = await piService.GetAsync(payment.StripePaymentIntentId);
+                        chargeId = pi.LatestChargeId;
+                        payment.StripeChargeId = chargeId;
+                    }
+
+                    var transferOpts = new TransferCreateOptions
                     {
                         Amount = (long)(match.PaymentAmount * 100),
                         Currency = "cad",
                         Destination = gkProfile.User.StripeConnectAccountId,
                         TransferGroup = payment.StripePaymentIntentId,
                         Description = $"Auto-payout for match at {match.FieldName}",
-                    });
+                    };
+                    if (!string.IsNullOrEmpty(chargeId))
+                        transferOpts.SourceTransaction = chargeId;
+
+                    var transferService = new TransferService();
+                    var transfer = await transferService.CreateAsync(transferOpts);
                     payment.StripeTransferId = transfer.Id;
                     payment.Status = PaymentStatus.Released;
                     payment.CompletedAt = DateTime.UtcNow;
@@ -375,7 +434,8 @@ public class BookingsController : ControllerBase
         var bookings = await _context.Matches
             .Include(m => m.TeamProfile).ThenInclude(t => t.User)
             .Include(m => m.Payment)
-            .Where(m => m.AcceptedGoalkeeperId == gkProfile.Id)
+            .Where(m => m.AcceptedGoalkeeperId == gkProfile.Id
+                && (m.Payment == null || m.Payment.Status != PaymentStatus.Pending))
             .OrderByDescending(m => m.CreatedAt)
             .Select(m => new
             {
@@ -412,7 +472,9 @@ public class BookingsController : ControllerBase
         if (match.Status != MatchStatus.Accepted)
             return BadRequest(new { error = "Can only cancel accepted bookings" });
 
-        // Check if already cancelled (one-time only)
+        if (match.MatchDateTime <= DateTime.UtcNow.AddHours(1))
+            return BadRequest(new { error = "Cancellations are not allowed within 1 hour of the match start time." });
+
         if ((match.Notes ?? "").Contains("[CAPTAIN_CANCELLED]"))
             return BadRequest(new { error = "This booking has already been cancelled" });
 
@@ -479,6 +541,9 @@ public class BookingsController : ControllerBase
         if (match.Status != MatchStatus.Accepted && match.Status != MatchStatus.Open)
             return BadRequest(new { error = "Cannot cancel this booking in its current state" });
 
+        if (match.MatchDateTime <= DateTime.UtcNow.AddHours(1))
+            return BadRequest(new { error = "Cancellations are not allowed within 1 hour of the match start time." });
+
         var payment = await _context.Payments.FirstOrDefaultAsync(p => p.MatchId == id);
         if (payment != null)
         {
@@ -524,6 +589,21 @@ public class BookingsController : ControllerBase
 
     private async Task<Guid> GetOrCreateGuestTeamProfileId(string name, string email, string phone)
     {
+        var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+
+        if (existingUser != null)
+        {
+            existingUser.PhoneNumber = phone;
+            var existingProfile = await _context.TeamProfiles.FirstOrDefaultAsync(t => t.UserId == existingUser.Id);
+            if (existingProfile != null)
+                return existingProfile.Id;
+
+            var newProfile = new TeamProfile { UserId = existingUser.Id, TeamName = $"{existingUser.FirstName}'s Team" };
+            _context.TeamProfiles.Add(newProfile);
+            await _context.SaveChangesAsync();
+            return newProfile.Id;
+        }
+
         var user = new User
         {
             Email = email,
@@ -546,6 +626,27 @@ public class BookingsController : ControllerBase
         await _context.SaveChangesAsync();
         return teamProfile.Id;
     }
+
+    private static decimal GetProvincialTaxRate(string provinceCode)
+    {
+        return (provinceCode?.ToUpper()) switch
+        {
+            "ON" => 0.13m,
+            "BC" => 0.12m,
+            "AB" => 0.05m,
+            "QC" => 0.14975m,
+            "MB" => 0.12m,
+            "SK" => 0.11m,
+            "NS" => 0.14m,
+            "NB" => 0.15m,
+            "NL" => 0.15m,
+            "PE" => 0.15m,
+            "NT" => 0.05m,
+            "NU" => 0.05m,
+            "YT" => 0.05m,
+            _ => 0.13m,
+        };
+    }
 }
 
 public record CreateBookingRequest(
@@ -559,5 +660,6 @@ public record CreateBookingRequest(
     string CaptainName,
     string CaptainEmail,
     string CaptainPhone,
+    string? ProvinceCode,
     string? Notes
 );

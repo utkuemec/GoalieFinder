@@ -20,8 +20,8 @@ export default function Navbar() {
               <Image src="/logo.png" alt="GoalieFinder" width={411} height={131} className="h-14 w-auto" priority />
             </Link>
             <div className="hidden md:flex items-center gap-6">
-              <Link href="/goalkeepers" className="text-sm font-medium text-slate-600 hover:text-emerald-600 transition-colors">
-                Browse Goalkeepers
+              <Link href="/matches/new" className="text-sm font-medium text-slate-600 hover:text-emerald-600 transition-colors">
+                Find a Goalkeeper
               </Link>
             </div>
           </div>
@@ -82,11 +82,11 @@ export default function Navbar() {
               Find a Goalkeeper
             </Link>
             <Link
-              href="/goalkeepers"
+              href="/matches/new"
               className="block px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 rounded-lg"
               onClick={() => setMobileMenuOpen(false)}
             >
-              Browse Goalkeepers
+              Find a Goalkeeper
             </Link>
             {isAuthenticated ? (
               <>

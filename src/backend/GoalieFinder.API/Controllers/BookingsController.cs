@@ -197,13 +197,24 @@ public class BookingsController : ControllerBase
         var payment = await _context.Payments.FirstOrDefaultAsync(p => p.MatchId == id);
         if (payment == null) return BadRequest(new { error = "Payment not found" });
 
-        // Capture payment (charge card) — money held by PLATFORM, not sent to goalkeeper yet
+        // Capture payment (charge card) — money held by PLATFORM, not sent to goalkeeper yet.
+        // Use AmountToCapture so admins can lower a match's total (e.g. when reassigning to a
+        // cheaper goalkeeper) and only the new total is charged; the rest of the auth is released.
         try
         {
             var piService = new PaymentIntentService();
-            var capturedPi = await piService.CaptureAsync(payment.StripePaymentIntentId);
+            var captureOptions = new PaymentIntentCaptureOptions
+            {
+                AmountToCapture = (long)Math.Round(match.TotalAmount * 100m)
+            };
+            var capturedPi = await piService.CaptureAsync(payment.StripePaymentIntentId, captureOptions);
             payment.Status = PaymentStatus.Captured;
             payment.StripeChargeId = capturedPi.LatestChargeId;
+            payment.Amount = match.TotalAmount;
+            payment.PlatformFee = match.PlatformFee;
+            payment.GoalkeeperPayout = match.PaymentAmount;
+            payment.TaxAmount = match.TaxAmount;
+            payment.StripeFee = match.StripeFee;
         }
         catch (StripeException ex)
         {

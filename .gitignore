@@ -34,3 +34,6 @@ terraform.tfvars
 *.tfstate
 *.tfstate.*
 .terraform/
+
+# Vendored Python packages (install from requirements instead)
+.video_deps/

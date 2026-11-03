@@ -5,6 +5,15 @@
 *.user
 *.suo
 
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+.Python
+*.egg-info/
+.eggs/
+
 # Node
 **/node_modules/
 **/.next/

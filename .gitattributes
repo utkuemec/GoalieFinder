@@ -1,0 +1,8 @@
+# Mark SQL files as vendored so they don't skew language statistics
+# These are database migrations and seed data, not the main project code
+*.sql linguist-vendored
+
+# Ensure C# and TypeScript are properly detected
+*.cs linguist-detectable
+*.tsx linguist-detectable
+*.ts linguist-detectable

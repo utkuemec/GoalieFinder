@@ -1,5 +1,8 @@
 # GoalieFinder Toronto
 
+[![CI Pipeline](https://github.com/utkuemec/GoalieFinder/actions/workflows/ci.yml/badge.svg)](https://github.com/utkuemec/GoalieFinder/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+
 A two-sided sports marketplace that connects soccer teams needing a goalkeeper with available goalkeepers in the Toronto area.
 
 ## Architecture Overview
@@ -117,4 +120,4 @@ docker compose up -d
 
 ## License
 
-Proprietary - All rights reserved.
+This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.
